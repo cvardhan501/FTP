@@ -98,6 +98,12 @@ body {
   100% { background-position: 0% 50%; }
 }
 
+@keyframes scanLaser {
+  0% { transform: translateY(0px); opacity: 0.8; }
+  50% { transform: translateY(180px); opacity: 1; }
+  100% { transform: translateY(0px); opacity: 0.8; }
+}
+
 /* Aurora background */
 .aurora-bg {
   position: fixed;
