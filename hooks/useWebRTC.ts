@@ -7,32 +7,41 @@ import { Socket } from "socket.io-client";
 
 export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
   const p2pRef = useRef<P2PConnectionManager | null>(null);
+  const earlyIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+
   const [peerConnected, setPeerConnected] = useState(false);
   const [incomingMeta, setIncomingMeta] = useState<IncomingFileMeta | null>(null);
   const [progressState, setProgressState] = useState<TransferProgressState | null>(null);
   const [completedBlobUrl, setCompletedBlobUrl] = useState<string | null>(null);
 
+  const progressStateRef = useRef<TransferProgressState | null>(null);
+  progressStateRef.current = progressState;
+
   // Buffer map for assembling incoming file chunks
   const incomingChunksRef = useRef<Map<number, ArrayBuffer>>(new Map());
   const receivedChunksCountRef = useRef(0);
 
-  // Initialize P2P connection
+  // Initialize P2P connection manager
   const initP2P = useCallback(
     async (isInitiator: boolean) => {
+      console.log(`[WebRTC] Initializing P2P connection (isInitiator=${isInitiator})`);
       const manager = new P2PConnectionManager();
       p2pRef.current = manager;
 
       manager.onIceCandidate = (candidate) => {
         if (socket) {
+          console.log("[WebRTC] Sending ICE candidate to peer");
           socket.emit("signal-ice", { candidate, sessionCode });
         }
       };
 
       manager.onDataChannelOpen = () => {
+        console.log("[WebRTC] ✅ Peer DataChannel Connected & Ready!");
         setPeerConnected(true);
       };
 
       manager.onDataChannelClose = () => {
+        console.log("[WebRTC] ❌ Peer DataChannel Closed");
         setPeerConnected(false);
       };
 
@@ -58,73 +67,101 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
           };
         });
 
-        // Trigger completion once all chunks are present
         if (count >= totalChunks) {
           assembleReceivedFile(totalChunks);
         }
       };
 
       await manager.initialize(isInitiator);
+
+      // Flush early ICE candidates that arrived before manager initialization
+      while (earlyIceCandidatesRef.current.length > 0) {
+        const cand = earlyIceCandidatesRef.current.shift();
+        if (cand) {
+          console.log("[WebRTC] Flushing buffered early ICE candidate");
+          await manager.addIceCandidate(cand);
+        }
+      }
+
       return manager;
     },
     [socket, sessionCode]
   );
 
-  // Socket signaling listeners
+  // Socket signaling listeners (Stable useEffect without progressState tear-downs)
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("peer-joined", async ({ peerId }) => {
+    console.log("[WebRTC] Setting up signaling listeners for room:", sessionCode);
+
+    const handlePeerJoined = async ({ peerId }: { peerId: string }) => {
+      console.log("[WebRTC] Peer joined room. Sender initiating offer to:", peerId);
       const manager = await initP2P(true);
       const offer = await manager.createOffer();
       socket.emit("signal-offer", { targetId: peerId, offer, sessionCode });
-    });
+    };
 
-    socket.on("signal-offer", async ({ senderId, offer }) => {
+    const handleSignalOffer = async ({ senderId, offer }: { senderId: string; offer: RTCSessionDescriptionInit }) => {
+      console.log("[WebRTC] Offer received from sender:", senderId);
       const manager = await initP2P(false);
       const answer = await manager.handleOffer(offer);
+      console.log("[WebRTC] Sending answer back to sender:", senderId);
       socket.emit("signal-answer", { targetId: senderId, answer, sessionCode });
-    });
+    };
 
-    socket.on("signal-answer", async ({ answer }) => {
+    const handleSignalAnswer = async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
+      console.log("[WebRTC] Answer received from receiver");
       if (p2pRef.current) {
         await p2pRef.current.handleAnswer(answer);
       }
-    });
+    };
 
-    socket.on("signal-ice", async ({ candidate }) => {
+    const handleSignalIce = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
       if (p2pRef.current) {
         await p2pRef.current.addIceCandidate(candidate);
+      } else {
+        console.log("[WebRTC] Buffering early ICE candidate before P2P manager ready");
+        earlyIceCandidatesRef.current.push(candidate);
       }
-    });
+    };
 
-    socket.on("file-meta", ({ fileMeta }) => {
+    const handleFileMeta = ({ fileMeta }: { fileMeta: IncomingFileMeta }) => {
+      console.log("[WebRTC] Received incoming file metadata:", fileMeta.name);
       setIncomingMeta(fileMeta);
-    });
+    };
 
-    socket.on("file-accept", async ({ transferId }) => {
-      // Receiver accepted file, sender starts transmitting
-      if (p2pRef.current && progressState?.status === "connecting") {
+    const handleFileAccept = () => {
+      console.log("[WebRTC] Receiver accepted file transfer offer");
+      if (p2pRef.current && progressStateRef.current?.status === "connecting") {
         setProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
       }
-    });
+    };
 
-    socket.on("file-reject", () => {
+    const handleFileReject = () => {
+      console.log("[WebRTC] Receiver declined file transfer offer");
       setProgressState((prev) =>
         prev ? { ...prev, status: "cancelled", errorMessage: "Transfer rejected by peer" } : null
       );
-    });
+    };
+
+    socket.on("peer-joined", handlePeerJoined);
+    socket.on("signal-offer", handleSignalOffer);
+    socket.on("signal-answer", handleSignalAnswer);
+    socket.on("signal-ice", handleSignalIce);
+    socket.on("file-meta", handleFileMeta);
+    socket.on("file-accept", handleFileAccept);
+    socket.on("file-reject", handleFileReject);
 
     return () => {
-      socket.off("peer-joined");
-      socket.off("signal-offer");
-      socket.off("signal-answer");
-      socket.off("signal-ice");
-      socket.off("file-meta");
-      socket.off("file-accept");
-      socket.off("file-reject");
+      socket.off("peer-joined", handlePeerJoined);
+      socket.off("signal-offer", handleSignalOffer);
+      socket.off("signal-answer", handleSignalAnswer);
+      socket.off("signal-ice", handleSignalIce);
+      socket.off("file-meta", handleFileMeta);
+      socket.off("file-accept", handleFileAccept);
+      socket.off("file-reject", handleFileReject);
     };
-  }, [socket, sessionCode, initP2P, progressState]);
+  }, [socket, sessionCode, initP2P]);
 
   // Reassemble chunks into downloadable Blob
   const assembleReceivedFile = (totalChunks: number) => {
@@ -150,7 +187,10 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
   // Start sending file
   const sendFileP2P = async (file: File, chunkSizeKb: number = 64) => {
-    if (!p2pRef.current) return;
+    if (!p2pRef.current) {
+      console.error("[WebRTC] Cannot send file: P2P manager is not connected");
+      return;
+    }
 
     const fileMeta: IncomingFileMeta = {
       id: Date.now().toString(),
@@ -178,7 +218,6 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       isSender: true,
     });
 
-    // Notify receiver
     if (socket) {
       socket.emit("file-meta", { sessionCode, fileMeta });
     }

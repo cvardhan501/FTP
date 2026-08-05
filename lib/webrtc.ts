@@ -33,6 +33,7 @@ export class P2PConnectionManager {
   async initialize(isInitiator: boolean): Promise<void> {
     this.peerConnection = new RTCPeerConnection({
       iceServers: DEFAULT_ICE_SERVERS,
+      iceCandidatePoolSize: 10,
     });
 
     this.pendingIceCandidates = [];
