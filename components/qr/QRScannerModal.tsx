@@ -160,8 +160,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
         {/* Hidden Canvas for Decoding */}
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Camera Viewport Area */}
-        <div className="relative w-full h-64 bg-slate-950 rounded-3xl overflow-hidden border border-white/15 shadow-2xl flex items-center justify-center">
+        {/* Camera Viewport Area (Perfect Square Shape) */}
+        <div className="relative w-64 h-64 mx-auto bg-slate-950 rounded-[32px] overflow-hidden border-2 border-purple-500/40 shadow-2xl flex items-center justify-center">
           <video
             ref={videoRef}
             className="w-full h-full object-cover"
@@ -171,14 +171,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
 
           {/* Glowing Animated Target Corner Brackets & Scanner Line */}
           {isScanning && !cameraError && (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="absolute inset-0 pointer-events-none p-3 flex items-center justify-center">
               {/* Target Square */}
-              <div className="w-48 h-48 relative border-2 border-purple-500/40 rounded-2xl shadow-2xl">
+              <div className="w-full h-full relative border-2 border-purple-400/50 rounded-2xl shadow-2xl">
                 {/* Corner Accents */}
-                <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-purple-400 rounded-tl-lg" />
-                <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-purple-400 rounded-tr-lg" />
-                <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-purple-400 rounded-bl-lg" />
-                <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-purple-400 rounded-br-lg" />
+                <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-purple-400 rounded-tl-xl" />
+                <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-purple-400 rounded-tr-xl" />
+                <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-purple-400 rounded-bl-xl" />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-purple-400 rounded-br-xl" />
 
                 {/* Moving Scanning Laser Line */}
                 <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_15px_#a855f7] animate-[scanLaser_2s_ease-in-out_infinite]" />
