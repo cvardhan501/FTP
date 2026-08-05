@@ -26,6 +26,7 @@ export interface IncomingFileMeta {
   name: string;
   size: number;
   type: string;
+  lastModified?: number;
   totalChunks: number;
   iv: string; // Base64 or hex for AES-GCM
   salt: string;
