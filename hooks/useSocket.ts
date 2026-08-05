@@ -6,13 +6,36 @@ import { DeviceInfo } from "../types";
 import { detectBrowser, detectOS, generateRandomDeviceName } from "../lib/utils";
 
 function getSignalingUrl(): string {
+  // If explicitly configured via environment variable
   if (process.env.NEXT_PUBLIC_SIGNALING_URL) {
-    return process.env.NEXT_PUBLIC_SIGNALING_URL;
+    let url = process.env.NEXT_PUBLIC_SIGNALING_URL.trim();
+    if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
+      url = url.replace("http://", "https://");
+    }
+    return url;
   }
+
   if (typeof window !== "undefined") {
+    const isHttps = window.location.protocol === "https:";
+    const protocol = isHttps ? "https" : "http";
     const hostname = window.location.hostname || "localhost";
-    return `http://${hostname}:3001`;
+
+    // Local development or local Wi-Fi IP (192.168.x.x, 10.x.x.x, 172.x.x.x)
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("172.")
+    ) {
+      return `${protocol}://${hostname}:3001`;
+    }
+
+    // Production / Deployed environment (e.g. Vercel, Render, Railway, Heroku)
+    // If deployed on Vercel, signaling server runs on Render/Railway/Server port 443 (HTTPS)
+    return `${protocol}://${hostname}`;
   }
+
   return "http://localhost:3001";
 }
 
@@ -41,18 +64,23 @@ export function useSocket() {
     const socket = io(signalingUrl, {
       reconnectionAttempts: 10,
       transports: ["websocket", "polling"],
+      secure: typeof window !== "undefined" && window.location.protocol === "https:",
     });
 
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("[Socket] Connected with Socket ID:", socket.id);
+      console.log("[Socket] Connected to signaling server with ID:", socket.id);
       setIsConnected(true);
       selfInfo.id = socket.id || "local";
       setDeviceInfo(selfInfo);
 
       // Announce device presence for discovery radar
       socket.emit("announce-device", selfInfo);
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("[Socket] Connection error:", err.message);
     });
 
     socket.on("disconnect", () => {
