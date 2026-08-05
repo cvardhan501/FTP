@@ -31,9 +31,9 @@ function getSignalingUrl(): string {
       return `${protocol}://${hostname}:3001`;
     }
 
-    // Production / Deployed environment (e.g. Vercel, Render, Railway, Heroku)
-    // If deployed on Vercel, signaling server runs on Render/Railway/Server port 443 (HTTPS)
-    return `${protocol}://${hostname}`;
+    // Production / Deployed environment (e.g. Vercel)
+    // Connect to live Render signaling server
+    return "https://ftp-sff3.onrender.com";
   }
 
   return "http://localhost:3001";
