@@ -5,7 +5,16 @@ import { io, Socket } from "socket.io-client";
 import { DeviceInfo } from "../types";
 import { detectBrowser, detectOS, generateRandomDeviceName } from "../lib/utils";
 
-const SIGNALING_URL = process.env.NEXT_PUBLIC_SIGNALING_URL || "http://localhost:3001";
+function getSignalingUrl(): string {
+  if (process.env.NEXT_PUBLIC_SIGNALING_URL) {
+    return process.env.NEXT_PUBLIC_SIGNALING_URL;
+  }
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname || "localhost";
+    return `http://${hostname}:3001`;
+  }
+  return "http://localhost:3001";
+}
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
@@ -15,7 +24,6 @@ export function useSocket() {
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
 
   useEffect(() => {
-    // Generate self device info
     const selfInfo: DeviceInfo = {
       id: "pending",
       name: generateRandomDeviceName(),
@@ -26,7 +34,10 @@ export function useSocket() {
       pingMs: 12,
     };
 
-    const socket = io(SIGNALING_URL, {
+    const signalingUrl = getSignalingUrl();
+    console.log("[Socket] Connecting to signaling server at:", signalingUrl);
+
+    const socket = io(signalingUrl, {
       reconnectionAttempts: 10,
       transports: ["websocket", "polling"],
     });
@@ -34,12 +45,12 @@ export function useSocket() {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("[Socket] Connected to signaling server with ID:", socket.id);
+      console.log("[Socket] Connected with Socket ID:", socket.id);
       setIsConnected(true);
       selfInfo.id = socket.id || "local";
       setDeviceInfo(selfInfo);
 
-      // Announce device presence
+      // Announce device presence for discovery radar
       socket.emit("announce-device", selfInfo);
     });
 

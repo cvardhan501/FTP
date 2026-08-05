@@ -143,8 +143,8 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`===================================================`);
-  console.log(`🚀 AirDropX Socket.IO Signaling Server running on port ${PORT}`);
+  console.log(`🚀 AirDropX Socket.IO Signaling Server running on 0.0.0.0:${PORT}`);
   console.log(`===================================================`);
 });

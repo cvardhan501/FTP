@@ -70,10 +70,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (isConnected && sessionCode) {
+    if (isConnected && sessionCode && (currentMode === "send" || currentMode === "landing")) {
       createRoom(sessionCode);
     }
-  }, [isConnected, sessionCode, createRoom]);
+  }, [isConnected, sessionCode, currentMode, createRoom]);
 
   // Socket clipboard listener
   useEffect(() => {

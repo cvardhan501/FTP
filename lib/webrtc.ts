@@ -8,6 +8,8 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
 ];
 
 export class P2PConnectionManager {
@@ -24,6 +26,7 @@ export class P2PConnectionManager {
 
   private isPaused = false;
   private isCancelled = false;
+  private pendingIceCandidates: RTCIceCandidateInit[] = [];
 
   constructor() {}
 
@@ -31,6 +34,8 @@ export class P2PConnectionManager {
     this.peerConnection = new RTCPeerConnection({
       iceServers: DEFAULT_ICE_SERVERS,
     });
+
+    this.pendingIceCandidates = [];
 
     // Generate AES key for session encryption
     this.cryptoKey = await generateAESKey();
@@ -77,7 +82,6 @@ export class P2PConnectionManager {
 
     channel.onmessage = async (event) => {
       if (typeof event.data === "string") {
-        // String message (control / handshake)
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "KEY_EXCHANGE") {
@@ -85,9 +89,7 @@ export class P2PConnectionManager {
           }
         } catch (e) {}
       } else if (event.data instanceof ArrayBuffer) {
-        // Encrypted chunk buffer
         const buffer = event.data;
-        // First 12 bytes = IV, rest = encrypted payload
         const iv = new Uint8Array(buffer.slice(0, 12));
         const encryptedBody = buffer.slice(12);
 
@@ -100,9 +102,7 @@ export class P2PConnectionManager {
           }
         }
 
-        // Send back ACK or process chunk
         if (this.onFileChunkReceived) {
-          // Payload structure: [4 bytes ChunkIndex][4 bytes TotalChunks][Raw chunk data]
           const view = new DataView(chunkData);
           const chunkIndex = view.getUint32(0);
           const totalChunks = view.getUint32(4);
@@ -123,6 +123,7 @@ export class P2PConnectionManager {
   async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
     if (!this.peerConnection) throw new Error("PeerConnection not initialized");
     await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    await this.flushPendingIceCandidates();
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
     return answer;
@@ -131,14 +132,35 @@ export class P2PConnectionManager {
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
     if (!this.peerConnection) throw new Error("PeerConnection not initialized");
     await this.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    await this.flushPendingIceCandidates();
   }
 
   async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-    if (!this.peerConnection) return;
-    await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) {
+      this.pendingIceCandidates.push(candidate);
+      return;
+    }
+    try {
+      await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+      console.warn("[P2P] Failed to add ICE candidate:", e);
+    }
   }
 
-  // Send Key Exchange to peer
+  private async flushPendingIceCandidates() {
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    while (this.pendingIceCandidates.length > 0) {
+      const candidate = this.pendingIceCandidates.shift();
+      if (candidate) {
+        try {
+          await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn("[P2P] Failed to flush ICE candidate:", e);
+        }
+      }
+    }
+  }
+
   sendKeyExchange() {
     if (this.dataChannel && this.dataChannel.readyState === "open" && this.cryptoKeyHex) {
       this.dataChannel.send(
@@ -147,7 +169,6 @@ export class P2PConnectionManager {
     }
   }
 
-  // Stream file in 64KB chunks with flow control & encryption
   async sendFile(
     file: File,
     chunkSizeKb: number = 64,
@@ -169,7 +190,6 @@ export class P2PConnectionManager {
     let lastTime = startTime;
     let bytesSinceLast = 0;
 
-    // Send Key first
     this.sendKeyExchange();
 
     for (let i = 0; i < totalChunks; i++) {
@@ -187,13 +207,11 @@ export class P2PConnectionManager {
       const fileSlice = file.slice(start, end);
       const rawBuffer = await fileSlice.arrayBuffer();
 
-      // Header: 4 bytes Index + 4 bytes Total
       const header = new ArrayBuffer(8);
       const headerView = new DataView(header);
       headerView.setUint32(0, i);
       headerView.setUint32(4, totalChunks);
 
-      // Concatenate header + raw payload
       const combined = new Uint8Array(header.byteLength + rawBuffer.byteLength);
       combined.set(new Uint8Array(header), 0);
       combined.set(new Uint8Array(rawBuffer), header.byteLength);
@@ -203,14 +221,12 @@ export class P2PConnectionManager {
 
       if (this.cryptoKey) {
         const encrypted = await encryptChunk(this.cryptoKey, combined.buffer, iv);
-        // Prepend 12 bytes IV
         const finalBuffer = new Uint8Array(12 + encrypted.byteLength);
         finalBuffer.set(iv, 0);
         finalBuffer.set(new Uint8Array(encrypted), 12);
         payloadBuffer = finalBuffer.buffer;
       }
 
-      // WebRTC Backpressure / Flow Control
       if (this.dataChannel.bufferedAmount > 8 * 1024 * 1024) {
         await new Promise<void>((resolve) => {
           if (!this.dataChannel) return resolve();
