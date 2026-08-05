@@ -1,4 +1,4 @@
-export type AppMode = 'landing' | 'send' | 'receive' | 'clipboard' | 'history' | 'settings';
+export type AppMode = 'landing' | 'home' | 'send' | 'receive' | 'radar' | 'clipboard' | 'history' | 'settings';
 
 export interface DeviceInfo {
   id: string;

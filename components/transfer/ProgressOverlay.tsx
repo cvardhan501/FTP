@@ -2,7 +2,7 @@
 
 import React from "react";
 import { TransferProgressState } from "../../types";
-import { Pause, Play, X, ShieldCheck, Zap, Activity } from "lucide-react";
+import { Pause, Play, X, Activity } from "lucide-react";
 import { Button, Card, Badge } from "../ui";
 import { formatBytes, formatDuration, formatSpeed } from "../../lib/utils";
 
@@ -25,81 +25,111 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({
   const isError = state.status === "error";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-lg animate-fadeIn">
-      <div className="glass-panel w-full max-w-lg p-6 sm:p-8 rounded-3xl relative border border-blue-500/40 shadow-2xl space-y-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-fadeIn">
+      <div className="glass-panel w-full max-w-sm p-6 sm:p-8 rounded-[36px] relative border border-blue-500/40 shadow-2xl space-y-6 text-center">
         {/* Top Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-blue-400 animate-spin" />
-            <span className="font-bold text-white text-base">
-              {state.isSender ? "Sending Encrypted File..." : "Receiving Stream..."}
-            </span>
-          </div>
-          <Badge variant={isCompleted ? "green" : isError ? "rose" : "blue"}>
-            {state.status.toUpperCase()}
-          </Badge>
+          <button onClick={onCancel} className="text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+          <span className="font-bold text-white text-base">
+            {state.isSender ? "Sending Files..." : "Receiving Stream..."}
+          </span>
+          <div className="w-5 h-5" />
         </div>
 
-        {/* Circular / Large Percentage display */}
-        <div className="text-center py-4 space-y-2">
-          <div className="text-5xl sm:text-6xl font-extrabold font-mono text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">
-            {state.percentage}%
+        {/* Circular Progress Gauge */}
+        <div className="relative w-44 h-44 mx-auto flex items-center justify-center">
+          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+            <circle
+              cx="50"
+              cy="50"
+              r="42"
+              className="text-slate-900 stroke-current"
+              strokeWidth="10"
+              fill="transparent"
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r="42"
+              className="text-blue-500 stroke-current transition-all duration-150 ease-out"
+              strokeWidth="10"
+              strokeDasharray={264}
+              strokeDashoffset={264 - (264 * state.percentage) / 100}
+              strokeLinecap="round"
+              fill="transparent"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-4xl font-black font-mono text-white">{state.percentage}%</span>
           </div>
-          <p className="text-base font-bold text-white truncate px-4">{state.fileName}</p>
+        </div>
+
+        {/* File Name & Size */}
+        <div className="space-y-1">
+          <h3 className="font-extrabold text-white text-base truncate px-4">{state.fileName}</h3>
           <p className="text-xs text-slate-400 font-mono">
             {formatBytes(state.transferredBytes)} / {formatBytes(state.fileSize)}
           </p>
         </div>
 
-        {/* Linear Progress Bar */}
-        <div className="space-y-2">
-          <div className="w-full h-3.5 bg-slate-950 rounded-full overflow-hidden border border-white/10 p-0.5 relative">
-            <div
-              className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full transition-all duration-150 ease-out shadow-lg shadow-blue-500/50"
-              style={{ width: `${state.percentage}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Live Telemetry Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-center text-xs">
-          <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5">
-            <span className="text-slate-400 text-[10px] block font-mono">CURRENT SPEED</span>
-            <span className="font-mono font-bold text-blue-400 text-sm">{formatSpeed(state.speedBps)}</span>
+        {/* Telemetry Stats Grid (Speed, Remaining, Chunks) */}
+        <div className="grid grid-cols-3 gap-2 pt-2 text-center text-xs">
+          <div className="bg-slate-900/80 p-3 rounded-2xl border border-white/5">
+            <span className="font-mono font-bold text-blue-400 text-sm block">
+              {formatSpeed(state.speedBps).replace("/s", "")}
+            </span>
+            <span className="text-slate-500 text-[10px] uppercase block font-mono mt-0.5">Speed</span>
           </div>
 
-          <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5">
-            <span className="text-slate-400 text-[10px] block font-mono">REMAINING TIME</span>
-            <span className="font-mono font-bold text-purple-400 text-sm">
+          <div className="bg-slate-900/80 p-3 rounded-2xl border border-white/5">
+            <span className="font-mono font-bold text-purple-400 text-sm block">
               {formatDuration(state.etaSeconds)}
             </span>
+            <span className="text-slate-500 text-[10px] uppercase block font-mono mt-0.5">Remaining</span>
           </div>
 
-          <div className="col-span-2 sm:col-span-1 bg-slate-900/60 p-3 rounded-xl border border-white/5">
-            <span className="text-slate-400 text-[10px] block font-mono">CHUNKS</span>
-            <span className="font-mono font-bold text-emerald-400 text-sm">
-              {state.currentChunk} / {state.totalChunks}
+          <div className="bg-slate-900/80 p-3 rounded-2xl border border-white/5">
+            <span className="font-mono font-bold text-emerald-400 text-sm block">
+              {state.currentChunk}/{state.totalChunks}
             </span>
+            <span className="text-slate-500 text-[10px] uppercase block font-mono mt-0.5">Chunks</span>
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Action Buttons (Pause / Cancel) */}
         <div className="flex items-center gap-3 pt-2">
           {state.status === "transferring" && (
-            <Button variant="glass" className="flex-1 py-3" onClick={onPause}>
-              <Pause className="w-4 h-4 mr-1 text-amber-400" /> Pause
-            </Button>
+            <button
+              onClick={onPause}
+              className="flex-1 py-3.5 rounded-2xl bg-blue-600/20 border border-blue-500/40 text-blue-300 font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-600/30 active:scale-95 transition-all"
+            >
+              <Pause className="w-4 h-4 fill-current" /> Pause
+            </button>
           )}
 
           {state.status === "paused" && (
-            <Button variant="primary" className="flex-1 py-3" onClick={onResume}>
-              <Play className="w-4 h-4 mr-1" /> Resume
-            </Button>
+            <button
+              onClick={onResume}
+              className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-500 active:scale-95 transition-all"
+            >
+              <Play className="w-4 h-4 fill-current" /> Resume
+            </button>
           )}
 
-          <Button variant="danger" className="flex-1 py-3" onClick={onCancel}>
-            <X className="w-4 h-4 mr-1" /> {isCompleted ? "Close" : "Cancel"}
-          </Button>
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3.5 rounded-2xl bg-rose-600/20 border border-rose-500/40 text-rose-400 font-bold text-sm flex items-center justify-center gap-2 hover:bg-rose-600/30 active:scale-95 transition-all"
+          >
+            <X className="w-4 h-4" /> {isCompleted ? "Close" : "Cancel"}
+          </button>
+        </div>
+
+        {/* Live Indicator */}
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-mono pt-1">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span>Live WebRTC Connection</span>
         </div>
       </div>
     </div>

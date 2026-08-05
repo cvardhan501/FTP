@@ -12,21 +12,26 @@ import { addHistoryRecord, getStoredSettings, getTransferHistory, saveStoredSett
 
 // Components
 import { Navbar } from "../components/navbar/Navbar";
+import { BottomNav } from "../components/navbar/BottomNav";
 import { LandingView } from "../components/landing/LandingView";
+import { HomeView } from "../components/home/HomeView";
 import { SendView } from "../components/send/SendView";
 import { ReceiveView } from "../components/receive/ReceiveView";
+import { NearbyDevicesView } from "../components/radar/NearbyDevicesView";
 import { ClipboardSyncView } from "../components/clipboard/ClipboardSyncView";
 import { HistoryView } from "../components/history/HistoryView";
 import { QRCodeModal } from "../components/qr/QRCodeModal";
 import { QRScannerModal } from "../components/qr/QRScannerModal";
 import { ProgressOverlay } from "../components/transfer/ProgressOverlay";
+import { TransferCompleteModal } from "../components/transfer/TransferCompleteModal";
+import { IncomingFileModal } from "../components/receive/IncomingFileModal";
 import { AIAssistantModal } from "../components/ai/AIAssistantModal";
 import { SettingsModal } from "../components/settings/SettingsModal";
 import { Button, Badge } from "../components/ui";
-import { Wifi, Check, X, ShieldCheck, Download, WifiOff } from "lucide-react";
+import { Download, WifiOff } from "lucide-react";
 
 export default function Home() {
-  const [currentMode, setCurrentMode] = useState<AppMode>("landing");
+  const [currentMode, setCurrentMode] = useState<AppMode>("home");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [settings, setSettings] = useState(getStoredSettings());
 
@@ -38,6 +43,7 @@ export default function Home() {
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [completionModalOpen, setCompletionModalOpen] = useState(false);
 
   // Files & Clipboard
   const [selectedFiles, setSelectedFiles] = useState<FileItem[]>([]);
@@ -86,7 +92,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (isConnected && sessionCode && (currentMode === "send" || currentMode === "landing")) {
+    if (isConnected && sessionCode && (currentMode === "send" || currentMode === "landing" || currentMode === "home")) {
       createRoom(sessionCode);
     }
   }, [isConnected, sessionCode, currentMode, createRoom]);
@@ -114,13 +120,14 @@ export default function Home() {
     ) {
       hasTriggeredCompletionRef.current = progressState.transferId;
       sfx.playSuccess();
+      setCompletionModalOpen(true);
       try {
         if (typeof confetti === "function") {
           confetti({
-            particleCount: 50,
-            spread: 60,
+            particleCount: 60,
+            spread: 70,
             origin: { y: 0.6 },
-            ticks: 120,
+            ticks: 150,
             disableForReducedMotion: true,
           });
         }
@@ -186,14 +193,6 @@ export default function Home() {
     socket.emit("clipboard-sync", { sessionCode, text, senderName: "Peer" });
   };
 
-  const handleAcceptInvite = () => {
-    if (incomingInvite) {
-      setSessionCode(incomingInvite.sessionCode);
-      joinRoom(incomingInvite.sessionCode);
-      acceptDeviceInvite(incomingInvite.senderId, incomingInvite.sessionCode);
-    }
-  };
-
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -213,7 +212,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans transition-colors">
+    <div className="min-h-screen flex flex-col font-sans transition-colors bg-[#090d16] text-white selection:bg-blue-500 selection:text-white">
       <Navbar
         currentMode={currentMode}
         onSelectMode={(m) => {
@@ -226,7 +225,7 @@ export default function Home() {
         onOpenAIAssistant={() => setAiAssistantOpen(true)}
       />
 
-      {/* Offline Status Warning Bar */}
+      {/* Offline Warning Bar */}
       {isOffline && (
         <div className="bg-amber-500/20 border-b border-amber-500/30 px-4 py-2 text-center text-xs text-amber-300 flex items-center justify-center gap-2 font-medium">
           <WifiOff className="w-4 h-4" /> ⚡ Offline Mode Active – App cached via PWA. Sharing works on Local Wi-Fi & Hotspot!
@@ -246,8 +245,17 @@ export default function Home() {
         </div>
       )}
 
-      <main className="flex-1">
+      <main className="flex-1 pb-24">
         {currentMode === "landing" && <LandingView onSelectMode={setCurrentMode} />}
+
+        {currentMode === "home" && (
+          <HomeView
+            onSelectMode={setCurrentMode}
+            activeDevices={activeDevices}
+            historyRecords={historyRecords}
+            onConnectDevice={(targetId) => sendDeviceInvite(targetId, sessionCode)}
+          />
+        )}
 
         {currentMode === "send" && (
           <SendView
@@ -275,6 +283,14 @@ export default function Home() {
           />
         )}
 
+        {currentMode === "radar" && (
+          <NearbyDevicesView
+            activeDevices={activeDevices}
+            onConnectDevice={(targetId) => sendDeviceInvite(targetId, sessionCode)}
+            onBack={() => setCurrentMode("home")}
+          />
+        )}
+
         {currentMode === "clipboard" && (
           <ClipboardSyncView
             messages={clipboardMessages}
@@ -294,7 +310,10 @@ export default function Home() {
         )}
       </main>
 
-      {/* Active Transfer Progress Overlay */}
+      {/* Floating Bottom Navigation Bar (Matches Mockup) */}
+      <BottomNav currentMode={currentMode} onSelectMode={setCurrentMode} />
+
+      {/* Active Transfer Progress Overlay (Matches Screen 6) */}
       <ProgressOverlay
         state={progressState}
         onPause={pauseTransfer}
@@ -302,39 +321,21 @@ export default function Home() {
         onCancel={cancelTransfer}
       />
 
-      {/* Direct Device Pairing Popup Modal */}
-      {incomingInvite && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="glass-panel w-full max-w-md p-6 rounded-3xl relative border border-purple-500/40 shadow-2xl space-y-6 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-purple-600/20 border border-purple-500/40 text-purple-400 mx-auto flex items-center justify-center">
-              <Wifi className="w-8 h-8 animate-pulse" />
-            </div>
+      {/* Transfer Complete Modal (Matches Screen 7) */}
+      <TransferCompleteModal
+        isOpen={completionModalOpen}
+        onClose={() => setCompletionModalOpen(false)}
+        fileName={progressState?.fileName}
+        fileSize={progressState?.fileSize}
+        completedBlobUrl={completedBlobUrl}
+      />
 
-            <div>
-              <Badge variant="purple" className="mb-2">1-Click Pair Request</Badge>
-              <h2 className="text-xl font-bold text-white">
-                {incomingInvite.senderDevice.name} wants to connect!
-              </h2>
-              <p className="text-xs text-slate-400 font-mono mt-1">
-                OS: {incomingInvite.senderDevice.os} • Browser: {incomingInvite.senderDevice.browser}
-              </p>
-            </div>
-
-            <div className="bg-slate-900/80 p-3 rounded-xl border border-white/10 text-xs text-slate-300 flex items-center justify-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Direct Wi-Fi WebRTC P2P Session
-            </div>
-
-            <div className="flex gap-3">
-              <Button variant="ghost" className="flex-1 py-3" onClick={declineDeviceInvite}>
-                <X className="w-4 h-4 mr-1 text-rose-400" /> Decline
-              </Button>
-              <Button variant="primary" className="flex-1 py-3" onClick={handleAcceptInvite}>
-                <Check className="w-4 h-4 mr-1 text-emerald-300" /> Accept & Pair
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Incoming File Offer Prompt Modal (Matches Screen 11) */}
+      <IncomingFileModal
+        incomingMeta={incomingMeta}
+        onAccept={acceptIncomingFile}
+        onDecline={rejectIncomingFile}
+      />
 
       {/* Modals */}
       <QRCodeModal
