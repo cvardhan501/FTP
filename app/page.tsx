@@ -6,6 +6,7 @@ import { AppMode, ClipboardMessage, FileItem, HistoryRecord } from "../types";
 import { useSocket } from "../hooks/useSocket";
 import { useWebRTC } from "../hooks/useWebRTC";
 import { useAudioSFX } from "../hooks/useAudioSFX";
+import { usePWA } from "../hooks/usePWA";
 import { generateSessionCode } from "../lib/utils";
 import { addHistoryRecord, getStoredSettings, getTransferHistory, saveStoredSettings } from "../lib/storage";
 
@@ -22,12 +23,15 @@ import { ProgressOverlay } from "../components/transfer/ProgressOverlay";
 import { AIAssistantModal } from "../components/ai/AIAssistantModal";
 import { SettingsModal } from "../components/settings/SettingsModal";
 import { Button, Badge } from "../components/ui";
-import { Wifi, Check, X, ShieldCheck } from "lucide-react";
+import { Wifi, Check, X, ShieldCheck, Download, WifiOff } from "lucide-react";
 
 export default function Home() {
   const [currentMode, setCurrentMode] = useState<AppMode>("landing");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [settings, setSettings] = useState(getStoredSettings());
+
+  // PWA Hook
+  const { isInstallable, isOffline, installPWA } = usePWA();
 
   // Modals state
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -68,9 +72,8 @@ export default function Home() {
     cancelTransfer,
   } = useWebRTC(socket, sessionCode);
 
-  const sfx = useAudioSFX(settings.soundEffects);
+  const sfx = useAudioSFX();
 
-  // Initialize room on creation or URL query search param
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
@@ -223,6 +226,26 @@ export default function Home() {
         onOpenAIAssistant={() => setAiAssistantOpen(true)}
       />
 
+      {/* Offline Status Warning Bar */}
+      {isOffline && (
+        <div className="bg-amber-500/20 border-b border-amber-500/30 px-4 py-2 text-center text-xs text-amber-300 flex items-center justify-center gap-2 font-medium">
+          <WifiOff className="w-4 h-4" /> ⚡ Offline Mode Active – App cached via PWA. Sharing works on Local Wi-Fi & Hotspot!
+        </div>
+      )}
+
+      {/* PWA Install Banner */}
+      {isInstallable && (
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2.5 text-white flex items-center justify-between text-xs font-semibold shadow-lg">
+          <div className="flex items-center gap-2">
+            <Download className="w-4 h-4 animate-bounce" />
+            <span>Install AirDropX App for 1-Tap Offline File Sharing on your phone!</span>
+          </div>
+          <Button variant="secondary" size="sm" onClick={installPWA} className="py-1 px-3 text-xs">
+            Install App
+          </Button>
+        </div>
+      )}
+
       <main className="flex-1">
         {currentMode === "landing" && <LandingView onSelectMode={setCurrentMode} />}
 
@@ -264,41 +287,48 @@ export default function Home() {
           <HistoryView
             records={historyRecords}
             onClearHistory={() => {
-              localStorage.removeItem("airdropx_transfer_history");
+              localStorage.removeItem("airdropx_history");
               setHistoryRecords([]);
             }}
           />
         )}
       </main>
 
-      {/* Instant Device Invite Popup Modal */}
+      {/* Active Transfer Progress Overlay */}
+      <ProgressOverlay
+        state={progressState}
+        onPause={pauseTransfer}
+        onResume={resumeTransfer}
+        onCancel={cancelTransfer}
+      />
+
+      {/* Direct Device Pairing Popup Modal */}
       {incomingInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="glass-panel w-full max-w-md p-6 rounded-3xl relative border border-indigo-500/50 shadow-2xl space-y-6 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 mx-auto flex items-center justify-center">
+          <div className="glass-panel w-full max-w-md p-6 rounded-3xl relative border border-purple-500/40 shadow-2xl space-y-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-purple-600/20 border border-purple-500/40 text-purple-400 mx-auto flex items-center justify-center">
               <Wifi className="w-8 h-8 animate-pulse" />
             </div>
 
             <div>
-              <Badge variant="purple" className="mb-2">Nearby Device Pairing</Badge>
+              <Badge variant="purple" className="mb-2">1-Click Pair Request</Badge>
               <h2 className="text-xl font-bold text-white">
-                {incomingInvite.senderDevice.name}
+                {incomingInvite.senderDevice.name} wants to connect!
               </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Wants to connect with your device for encrypted peer-to-peer file transfer.
+              <p className="text-xs text-slate-400 font-mono mt-1">
+                OS: {incomingInvite.senderDevice.os} • Browser: {incomingInvite.senderDevice.browser}
               </p>
             </div>
 
             <div className="bg-slate-900/80 p-3 rounded-xl border border-white/10 text-xs text-slate-300 flex items-center justify-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Session PIN:{" "}
-              <span className="font-mono text-blue-400 font-bold">{incomingInvite.sessionCode}</span>
+              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Direct Wi-Fi WebRTC P2P Session
             </div>
 
             <div className="flex gap-3">
               <Button variant="ghost" className="flex-1 py-3" onClick={declineDeviceInvite}>
                 <X className="w-4 h-4 mr-1 text-rose-400" /> Decline
               </Button>
-              <Button variant="secondary" className="flex-1 py-3" onClick={handleAcceptInvite}>
+              <Button variant="primary" className="flex-1 py-3" onClick={handleAcceptInvite}>
                 <Check className="w-4 h-4 mr-1 text-emerald-300" /> Accept & Pair
               </Button>
             </div>
@@ -306,7 +336,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modals & Overlays */}
+      {/* Modals */}
       <QRCodeModal
         isOpen={qrModalOpen}
         onClose={() => setQrModalOpen(false)}
@@ -317,15 +347,9 @@ export default function Home() {
         isOpen={qrScannerOpen}
         onClose={() => setQrScannerOpen(false)}
         onScanSuccess={(code) => {
+          setQrScannerOpen(false);
           handleJoinRoomByCode(code);
         }}
-      />
-
-      <ProgressOverlay
-        state={progressState}
-        onPause={pauseTransfer}
-        onResume={resumeTransfer}
-        onCancel={cancelTransfer}
       />
 
       <AIAssistantModal

@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { IncomingFileMeta } from "../../types";
-import { Download, Camera, KeyRound, Wifi, ShieldCheck, FileCheck, X, Check, ArrowRight } from "lucide-react";
+import { Download, Camera, Wifi, ShieldCheck, FileCheck, X, Check } from "lucide-react";
 import { Button, Card, Badge } from "../ui";
 import { formatBytes } from "../../lib/utils";
+import { MobileKeypad } from "./MobileKeypad";
 
 interface ReceiveViewProps {
   onJoinRoom: (code: string) => Promise<{ success: boolean; error?: string }>;
@@ -29,13 +30,12 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleConnectSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (sessionCodeInput.trim().length !== 6) return;
+  const handleConnectCode = async (code: string) => {
+    if (code.trim().length !== 6) return;
 
     setLoading(true);
     setErrorMessage(null);
-    const res = await onJoinRoom(sessionCodeInput.trim());
+    const res = await onJoinRoom(code.trim());
     setLoading(false);
 
     if (!res.success) {
@@ -44,51 +44,38 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12 space-y-8 animate-fadeIn">
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-8 animate-fadeIn">
       <div className="text-center space-y-3">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-600 p-4 mx-auto text-white shadow-xl shadow-purple-500/30">
           <Download className="w-full h-full" />
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white">Receive Files</h1>
         <p className="text-slate-400 text-sm max-w-md mx-auto">
-          Enter the 6-digit session code displayed on the sender&apos;s device or scan their QR Code.
+          Enter the 6-digit session code using the mobile keypad or scan the QR Code.
         </p>
       </div>
 
       {/* Connection Card */}
       {!peerConnected && (
-        <Card className="max-w-md mx-auto border-purple-500/30">
-          <form onSubmit={handleConnectSubmit} className="space-y-6">
-            <div>
-              <label className="text-xs text-slate-400 font-mono uppercase tracking-wider block mb-2 text-center">
-                Enter 6-Digit Session PIN
-              </label>
-              <input
-                type="text"
-                maxLength={6}
-                placeholder="e.g. 748392"
-                value={sessionCodeInput}
-                onChange={(e) => setSessionCodeInput(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-950 border border-white/20 rounded-2xl text-center font-mono text-3xl font-bold tracking-widest text-purple-400 placeholder-slate-700 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
-              />
-            </div>
+        <Card className="max-w-md mx-auto border-purple-500/30 space-y-6">
+          <div className="text-center space-y-1">
+            <span className="text-xs text-slate-400 font-mono uppercase tracking-wider">
+              6-Digit Session PIN
+            </span>
+          </div>
 
-            {errorMessage && (
-              <p className="text-xs text-rose-400 text-center font-medium">{errorMessage}</p>
-            )}
+          <MobileKeypad
+            value={sessionCodeInput}
+            onChange={(val) => setSessionCodeInput(val)}
+            onSubmit={(code) => handleConnectCode(code)}
+            loading={loading}
+          />
 
-            <Button
-              variant="secondary"
-              size="lg"
-              type="submit"
-              disabled={sessionCodeInput.length !== 6 || loading}
-              className="w-full text-base py-3.5"
-            >
-              {loading ? "Connecting..." : "Connect to Sender"} <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </form>
+          {errorMessage && (
+            <p className="text-xs text-rose-400 text-center font-medium">{errorMessage}</p>
+          )}
 
-          <div className="relative my-6 text-center">
+          <div className="relative my-4 text-center">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
             <span className="relative bg-slate-900 px-3 text-xs text-slate-500">OR</span>
           </div>
