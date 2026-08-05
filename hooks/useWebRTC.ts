@@ -286,9 +286,21 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     setIncomingMeta(null);
   };
 
-  const pauseTransfer = () => p2pRef.current?.pauseTransfer();
-  const resumeTransfer = () => p2pRef.current?.resumeTransfer();
-  const cancelTransfer = () => p2pRef.current?.cancelTransfer();
+  const pauseTransfer = () => {
+    p2pRef.current?.pauseTransfer();
+    setProgressState((prev) => (prev ? { ...prev, status: "paused" } : null));
+  };
+
+  const resumeTransfer = () => {
+    p2pRef.current?.resumeTransfer();
+    setProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
+  };
+
+  const cancelTransfer = () => {
+    p2pRef.current?.cancelTransfer();
+    setProgressState(null);
+    setIncomingMeta(null);
+  };
 
   return {
     peerConnected,

@@ -195,6 +195,7 @@ export class P2PConnectionManager {
 
     this.sendKeyExchange();
 
+    // High performance paced chunk streaming loop
     for (let i = 0; i < totalChunks; i++) {
       if (this.isCancelled) {
         console.log("[P2P] Transfer cancelled by user");
@@ -202,7 +203,7 @@ export class P2PConnectionManager {
       }
 
       while (this.isPaused) {
-        await new Promise((res) => setTimeout(res, 200));
+        await new Promise((res) => setTimeout(res, 100));
       }
 
       const start = i * chunkSize;
@@ -230,42 +231,35 @@ export class P2PConnectionManager {
         payloadBuffer = finalBuffer.buffer;
       }
 
-      // Robust Flow Control with 50ms Safety Polling Fallback (Never hangs at 50%)
-      if (this.dataChannel.bufferedAmount > 4 * 1024 * 1024) {
-        await new Promise<void>((resolve) => {
-          let checkInterval: any = null;
-          let doneCalled = false;
-
-          const done = () => {
-            if (doneCalled) return;
-            doneCalled = true;
-            if (checkInterval) clearInterval(checkInterval);
-            if (this.dataChannel) this.dataChannel.onbufferedamountlow = null;
-            resolve();
-          };
-
-          if (this.dataChannel) {
-            this.dataChannel.bufferedAmountLowThreshold = 1024 * 1024;
-            this.dataChannel.onbufferedamountlow = done;
-          }
-
-          // Polling check every 50ms ensures loop never freezes even if event fails
-          checkInterval = setInterval(() => {
-            if (!this.dataChannel || this.dataChannel.bufferedAmount <= 1024 * 1024) {
-              done();
-            }
-          }, 50);
-        });
+      // Smart Pacing: Keep bufferedAmount under 256KB to avoid WebRTC queue chokes
+      while (this.dataChannel && this.dataChannel.bufferedAmount > 256 * 1024) {
+        if (this.isCancelled) return;
+        await new Promise((res) => setTimeout(res, 4));
       }
 
-      this.dataChannel.send(payloadBuffer);
+      // Safe Send with Retry Recovery
+      let sentSuccess = false;
+      let retries = 0;
+      while (!sentSuccess && retries < 5) {
+        try {
+          if (!this.dataChannel || this.dataChannel.readyState !== "open") {
+            throw new Error("DataChannel connection closed during send");
+          }
+          this.dataChannel.send(payloadBuffer);
+          sentSuccess = true;
+        } catch (err) {
+          retries++;
+          console.warn(`[P2P] Buffer pressure on chunk ${i}, retrying (${retries}/5)...`);
+          await new Promise((res) => setTimeout(res, 15));
+        }
+      }
 
       sentBytes += end - start;
       bytesSinceLast += end - start;
 
       const now = Date.now();
       const timeDiff = (now - lastTime) / 1000;
-      if (timeDiff >= 0.1 || i === totalChunks - 1) {
+      if (timeDiff >= 0.05 || i === totalChunks - 1) {
         const speedBps = bytesSinceLast / (timeDiff || 0.001);
         if (onProgress) onProgress(sentBytes, totalSize, speedBps);
         lastTime = now;
