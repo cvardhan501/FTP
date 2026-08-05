@@ -1,0 +1,42 @@
+{
+  "name": "airdropx",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "server": "node server/index.js",
+    "dev:all": "concurrently \"npm run server\" \"npm run dev\""
+  },
+  "dependencies": {
+    "@babel/runtime": "^8.0.0",
+    "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "express": "^4.19.2",
+    "framer-motion": "^11.11.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^0.453.0",
+    "next": "^14.2.15",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io": "^4.8.0",
+    "socket.io-client": "^4.8.0",
+    "tailwind-merge": "^2.5.4"
+  },
+  "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.17.0",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3"
+  }
+}
