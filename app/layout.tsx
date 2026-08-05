@@ -5,7 +5,6 @@ export const metadata: Metadata = {
   title: "AirDropX – Premium Offline WebRTC P2P File Transfer Engine",
   description: "Secure, instant peer-to-peer file sharing directly between devices without uploading to any cloud server.",
   keywords: ["AirDropX", "WebRTC", "P2P", "File Transfer", "Offline Sharing", "Socket.IO", "End-to-End Encryption"],
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -29,7 +28,6 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>

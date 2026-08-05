@@ -1,19 +1,24 @@
-import { MetadataRoute } from 'next';
+import { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'AirDropX Offline P2P Transfer',
-    short_name: 'AirDropX',
-    description: 'Ultra-fast offline peer-to-peer file transfer engine built with WebRTC and Socket.IO',
-    start_url: '/',
-    display: 'standalone',
-    background_color: '#090d16',
-    theme_color: '#3b82f6',
+    name: "AirDropX - P2P Offline File Transfer",
+    short_name: "AirDropX",
+    description: "Secure, instant peer-to-peer file sharing directly between devices without uploading to any cloud server.",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#090d16",
+    theme_color: "#090d16",
     icons: [
       {
-        src: '/favicon.ico',
-        sizes: 'any',
-        type: 'image/x-icon',
+        src: "/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        src: "/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
       },
     ],
   };
