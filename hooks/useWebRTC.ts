@@ -9,6 +9,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
   const p2pRef = useRef<P2PConnectionManager | null>(null);
   const earlyIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const pendingFileRef = useRef<{ file: File; chunkSizeKb: number } | null>(null);
+  const incomingMetaRef = useRef<IncomingFileMeta | null>(null);
 
   const [peerConnected, setPeerConnected] = useState(false);
   const [incomingMeta, setIncomingMeta] = useState<IncomingFileMeta | null>(null);
@@ -128,6 +129,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
     const handleFileMeta = ({ fileMeta }: { fileMeta: IncomingFileMeta }) => {
       console.log("[WebRTC] Received incoming file metadata:", fileMeta.name, "Type:", fileMeta.type, "Size:", fileMeta.size);
+      incomingMetaRef.current = fileMeta;
       setIncomingMeta(fileMeta);
     };
 
@@ -199,17 +201,23 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
   // Reassemble chunks into downloadable File object (Byte-for-byte exact metadata)
   const assembleReceivedFile = (totalChunks: number) => {
+    const meta = incomingMetaRef.current;
+    if (!meta) {
+      console.error("[WebRTC] Error: No metadata found for received file.");
+      return;
+    }
+
     const chunkArray: ArrayBuffer[] = [];
     for (let i = 0; i < totalChunks; i++) {
       const chunk = incomingChunksRef.current.get(i);
       if (chunk) chunkArray.push(chunk);
     }
 
-    const exactName = incomingMeta?.name || "transferred_file";
-    const exactType = incomingMeta?.type || "application/octet-stream";
-    const exactLastModified = incomingMeta?.lastModified || Date.now();
+    const exactName = meta.name;
+    const exactType = meta.type || "application/octet-stream";
+    const exactLastModified = meta.lastModified || Date.now();
 
-    console.log(`[WebRTC] Reassembling byte-for-byte File: "${exactName}", Type: "${exactType}", Size: ${incomingMeta?.size} bytes`);
+    console.log(`[WebRTC] Reassembling byte-for-byte File: "${exactName}", Type: "${exactType}", Size: ${meta.size} bytes`);
 
     // 1. Collect chunks into Blob using original MIME type
     const receivedBlob = new Blob(chunkArray, { type: exactType });
@@ -223,7 +231,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     const url = URL.createObjectURL(fileObj);
     setCompletedBlobUrl(url);
 
-    // 3. Trigger download using exact original filename
+    // 3. Trigger download using exact original filename (never hardcoded fallback)
     const a = document.createElement("a");
     a.href = url;
     a.download = exactName;
@@ -235,7 +243,8 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       if (document.body.contains(a)) {
         document.body.removeChild(a);
       }
-    }, 1000);
+      URL.revokeObjectURL(url);
+    }, 2000);
   };
 
   // Start sending file handshake
@@ -246,7 +255,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     }
 
     const fileMeta: IncomingFileMeta = {
-      id: Date.now().toString(),
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
       name: file.name,
       size: file.size,
       type: file.type || "application/octet-stream",
@@ -281,17 +290,18 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
   };
 
   const acceptIncomingFile = () => {
-    if (!incomingMeta) return;
+    const meta = incomingMetaRef.current;
+    if (!meta) return;
     incomingChunksRef.current.clear();
     receivedChunksCountRef.current = 0;
 
     setProgressState({
-      transferId: incomingMeta.id,
-      fileName: incomingMeta.name,
-      fileSize: incomingMeta.size,
+      transferId: meta.id,
+      fileName: meta.name,
+      fileSize: meta.size,
       transferredBytes: 0,
       currentChunk: 0,
-      totalChunks: incomingMeta.totalChunks,
+      totalChunks: meta.totalChunks,
       speedBps: 0,
       etaSeconds: 0,
       percentage: 0,
@@ -300,15 +310,17 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     });
 
     if (socket) {
-      socket.emit("file-accept", { targetId: incomingMeta.senderId, transferId: incomingMeta.id });
+      socket.emit("file-accept", { targetId: meta.senderId, transferId: meta.id });
     }
   };
 
   const rejectIncomingFile = () => {
-    if (!incomingMeta) return;
+    const meta = incomingMetaRef.current;
+    if (!meta) return;
     if (socket) {
-      socket.emit("file-reject", { targetId: incomingMeta.senderId, transferId: incomingMeta.id });
+      socket.emit("file-reject", { targetId: meta.senderId, transferId: meta.id });
     }
+    incomingMetaRef.current = null;
     setIncomingMeta(null);
   };
 
@@ -325,6 +337,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
   const cancelTransfer = () => {
     p2pRef.current?.cancelTransfer();
     setProgressState(null);
+    incomingMetaRef.current = null;
     setIncomingMeta(null);
     pendingFileRef.current = null;
   };

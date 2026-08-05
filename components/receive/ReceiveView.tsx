@@ -159,7 +159,7 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
           <p className="text-xs text-slate-400">File assembled and saved automatically to your device.</p>
           <a
             href={completedBlobUrl}
-            download={incomingMeta ? incomingMeta.name : "transferred_file"}
+            download={incomingMeta?.name}
             className="inline-flex items-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs gap-2"
           >
             <Download className="w-4 h-4" /> Download {incomingMeta?.name || "File"}
