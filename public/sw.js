@@ -2,8 +2,8 @@ const CACHE_NAME = "airdropx-v1";
 const ASSETS_TO_CACHE = [
   "/",
   "/manifest.json",
-  "/globals.css",
-  "/favicon.ico"
+  "/icon-192.png",
+  "/icon-512.png"
 ];
 
 self.addEventListener("install", (event) => {
