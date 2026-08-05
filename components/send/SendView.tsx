@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { DeviceInfo, FileItem } from "../../types";
-import { Upload, File, Image, Film, FileText, Music, Folder, X, QrCode, Sparkles, Send, ShieldCheck, Copy, Check, Radar, Monitor } from "lucide-react";
+import { Upload, File, Image, Film, FileText, Music, Folder, X, QrCode, Sparkles, Send, ShieldCheck, Copy, Check, Radar, Monitor, Wifi, ArrowRight } from "lucide-react";
 import { Button, Card, Badge } from "../ui";
 import { formatBytes } from "../../lib/utils";
 import { analyzeTransferAI } from "../../lib/ai-engine";
@@ -16,6 +16,7 @@ interface SendViewProps {
   activeDevices: DeviceInfo[];
   peerConnected: boolean;
   onStartTransfer: (file: FileItem) => void;
+  onSendDeviceInvite: (targetId: string) => void;
 }
 
 export const SendView: React.FC<SendViewProps> = ({
@@ -27,11 +28,13 @@ export const SendView: React.FC<SendViewProps> = ({
   activeDevices,
   peerConnected,
   onStartTransfer,
+  onSendDeviceInvite,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [invitedId, setInvitedId] = useState<string | null>(null);
 
   const aiAnalysis = analyzeTransferAI(
     files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
@@ -55,6 +58,12 @@ export const SendView: React.FC<SendViewProps> = ({
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
+  const handleInvite = (targetId: string) => {
+    onSendDeviceInvite(targetId);
+    setInvitedId(targetId);
+    setTimeout(() => setInvitedId(null), 3000);
+  };
+
   const getFileIcon = (type: string, name: string) => {
     if (type.startsWith("image/")) return <Image className="w-5 h-5 text-blue-400" />;
     if (type.startsWith("video/")) return <Film className="w-5 h-5 text-purple-400" />;
@@ -74,7 +83,7 @@ export const SendView: React.FC<SendViewProps> = ({
             <Send className="w-8 h-8 text-blue-400" /> Send Files Mode
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Drop files below and share your 6-digit session code or QR code with the receiver.
+            Drop files below and share your session code, QR code, or pair with nearby discovered devices.
           </p>
         </div>
 
@@ -223,19 +232,19 @@ export const SendView: React.FC<SendViewProps> = ({
           <Card className="border-indigo-500/30">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/10">
               <h3 className="font-bold text-white text-base flex items-center gap-2">
-                <Radar className="w-5 h-5 text-indigo-400 animate-spin" /> Local Network Devices
+                <Radar className="w-5 h-5 text-indigo-400 animate-spin" /> Nearby Discovered Devices
               </h3>
               <Badge variant={peerConnected ? "green" : "purple"}>
-                {peerConnected ? "Peer Connected" : "Scanning..."}
+                {peerConnected ? "Peer Connected" : `${activeDevices.length} Active`}
               </Badge>
             </div>
 
             {activeDevices.length === 0 ? (
               <div className="text-center py-8 text-slate-400 space-y-3">
                 <Monitor className="w-10 h-10 mx-auto text-slate-600" />
-                <p className="text-xs">No nearby devices detected yet.</p>
+                <p className="text-xs">Scanning local Wi-Fi for AirDropX devices...</p>
                 <p className="text-[11px] text-slate-500">
-                  Open AirDropX on receiver device and enter code <span className="font-mono text-blue-400 font-bold">{sessionCode}</span>.
+                  Open AirDropX on receiver device or enter code <span className="font-mono text-blue-400 font-bold">{sessionCode}</span>.
                 </p>
               </div>
             ) : (
@@ -249,17 +258,33 @@ export const SendView: React.FC<SendViewProps> = ({
                         : "bg-slate-900/60 border-white/10 hover:border-indigo-500/40"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-sm">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-sm shrink-0">
                         {device.os === "windows" ? "🪟" : device.os === "mac" || device.os === "ios" ? "🍎" : device.os === "android" ? "🤖" : "💻"}
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-white">{device.name} {device.isSelf ? "(You)" : ""}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">
-                          {device.os.toUpperCase()} • {device.browser} • {device.pingMs || 15}ms ping
+                      <div className="overflow-hidden">
+                        <p className="text-sm font-semibold text-white truncate">{device.name} {device.isSelf ? "(This Device)" : ""}</p>
+                        <p className="text-[10px] text-slate-400 font-mono truncate">
+                          {device.os.toUpperCase()} • {device.browser} • {device.pingMs || 12}ms
                         </p>
                       </div>
                     </div>
+
+                    {!device.isSelf && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleInvite(device.id)}
+                        className="shrink-0"
+                      >
+                        {invitedId === device.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-300" />
+                        ) : (
+                          <Wifi className="w-3.5 h-3.5 mr-1" />
+                        )}
+                        {invitedId === device.id ? "Invited" : "Connect"}
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>

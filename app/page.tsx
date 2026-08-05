@@ -21,6 +21,8 @@ import { QRScannerModal } from "../components/qr/QRScannerModal";
 import { ProgressOverlay } from "../components/transfer/ProgressOverlay";
 import { AIAssistantModal } from "../components/ai/AIAssistantModal";
 import { SettingsModal } from "../components/settings/SettingsModal";
+import { Button, Badge } from "../components/ui";
+import { Wifi, Check, X, ShieldCheck } from "lucide-react";
 
 export default function Home() {
   const [currentMode, setCurrentMode] = useState<AppMode>("landing");
@@ -39,7 +41,18 @@ export default function Home() {
   const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>(getTransferHistory());
 
   // Socket & WebRTC Hooks
-  const { socket, isConnected, activeDevices, createRoom, joinRoom } = useSocket();
+  const {
+    socket,
+    isConnected,
+    activeDevices,
+    incomingInvite,
+    sendDeviceInvite,
+    acceptDeviceInvite,
+    declineDeviceInvite,
+    createRoom,
+    joinRoom,
+  } = useSocket();
+
   const [sessionCode, setSessionCode] = useState(() => generateSessionCode());
 
   const {
@@ -157,6 +170,14 @@ export default function Home() {
     socket.emit("clipboard-sync", { sessionCode, text, senderName: "Peer" });
   };
 
+  const handleAcceptInvite = () => {
+    if (incomingInvite) {
+      setSessionCode(incomingInvite.sessionCode);
+      joinRoom(incomingInvite.sessionCode);
+      acceptDeviceInvite(incomingInvite.senderId, incomingInvite.sessionCode);
+    }
+  };
+
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -202,6 +223,7 @@ export default function Home() {
             activeDevices={activeDevices}
             peerConnected={peerConnected}
             onStartTransfer={handleStartTransfer}
+            onSendDeviceInvite={(targetId) => sendDeviceInvite(targetId, sessionCode)}
           />
         )}
 
@@ -235,6 +257,41 @@ export default function Home() {
           />
         )}
       </main>
+
+      {/* Instant Device Invite Popup Modal */}
+      {incomingInvite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="glass-panel w-full max-w-md p-6 rounded-3xl relative border border-indigo-500/50 shadow-2xl space-y-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 mx-auto flex items-center justify-center">
+              <Wifi className="w-8 h-8 animate-pulse" />
+            </div>
+
+            <div>
+              <Badge variant="purple" className="mb-2">Nearby Device Pairing</Badge>
+              <h2 className="text-xl font-bold text-white">
+                {incomingInvite.senderDevice.name}
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Wants to connect with your device for encrypted peer-to-peer file transfer.
+              </p>
+            </div>
+
+            <div className="bg-slate-900/80 p-3 rounded-xl border border-white/10 text-xs text-slate-300 flex items-center justify-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Session PIN:{" "}
+              <span className="font-mono text-blue-400 font-bold">{incomingInvite.sessionCode}</span>
+            </div>
+
+            <div className="flex gap-3">
+              <Button variant="ghost" className="flex-1 py-3" onClick={declineDeviceInvite}>
+                <X className="w-4 h-4 mr-1 text-rose-400" /> Decline
+              </Button>
+              <Button variant="secondary" className="flex-1 py-3" onClick={handleAcceptInvite}>
+                <Check className="w-4 h-4 mr-1 text-emerald-300" /> Accept & Pair
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals & Overlays */}
       <QRCodeModal

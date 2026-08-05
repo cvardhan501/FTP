@@ -19,6 +19,21 @@ const rooms = new Map();
 // Active discovery devices list: socketId -> deviceMetaData
 const discoveryDevices = new Map();
 
+// Periodically prune offline devices (every 10 seconds)
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  for (const [id, dev] of discoveryDevices.entries()) {
+    if (now - dev.lastSeen > 20000) { // 20s timeout
+      discoveryDevices.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) {
+    io.emit("discovery-update", Array.from(discoveryDevices.values()));
+  }
+}, 10000);
+
 app.get("/health", (req, res) => {
   res.json({ status: "ok", activeRooms: rooms.size, activeDevices: discoveryDevices.size });
 });
@@ -26,7 +41,7 @@ app.get("/health", (req, res) => {
 io.on("connection", (socket) => {
   console.log(`[Signaling] Device connected: ${socket.id}`);
 
-  // Device discovery presence
+  // Device discovery presence & heartbeat
   socket.on("announce-device", (deviceData) => {
     const info = {
       ...deviceData,
@@ -34,8 +49,29 @@ io.on("connection", (socket) => {
       lastSeen: Date.now(),
     };
     discoveryDevices.set(socket.id, info);
-    // Broadcast active device list to all connected peers
     io.emit("discovery-update", Array.from(discoveryDevices.values()));
+  });
+
+  socket.on("heartbeat", () => {
+    const dev = discoveryDevices.get(socket.id);
+    if (dev) {
+      dev.lastSeen = Date.now();
+    }
+  });
+
+  // Direct Device Invite & Pairing Handshake
+  socket.on("device-invite", ({ targetId, sessionCode, senderDevice }) => {
+    console.log(`[Signaling] Device invite from ${socket.id} to ${targetId}`);
+    io.to(targetId).emit("device-invite", {
+      senderId: socket.id,
+      sessionCode,
+      senderDevice,
+    });
+  });
+
+  socket.on("device-invite-accept", ({ senderId, sessionCode }) => {
+    console.log(`[Signaling] Device invite accepted by ${socket.id}`);
+    io.to(senderId).emit("device-invite-accepted", { receiverId: socket.id, sessionCode });
   });
 
   // Create room with session code

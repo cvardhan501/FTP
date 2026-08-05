@@ -22,6 +22,7 @@ export function useSocket() {
   const [activeDevices, setActiveDevices] = useState<DeviceInfo[]>([]);
   const [currentSessionCode, setCurrentSessionCode] = useState<string | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [incomingInvite, setIncomingInvite] = useState<{ senderId: string; sessionCode: string; senderDevice: DeviceInfo } | null>(null);
 
   useEffect(() => {
     const selfInfo: DeviceInfo = {
@@ -68,10 +69,46 @@ export function useSocket() {
       );
     });
 
+    socket.on("device-invite", (invite) => {
+      console.log("[Socket] Incoming device invite:", invite);
+      setIncomingInvite(invite);
+    });
+
+    // Heartbeat every 5 seconds to stay active in radar
+    const heartbeatTimer = setInterval(() => {
+      if (socket.connected) {
+        socket.emit("heartbeat");
+      }
+    }, 5000);
+
     return () => {
+      clearInterval(heartbeatTimer);
       socket.disconnect();
     };
   }, []);
+
+  const sendDeviceInvite = (targetId: string, sessionCode: string) => {
+    if (socketRef.current && deviceInfo) {
+      console.log("[Socket] Sending direct invite to device:", targetId);
+      socketRef.current.emit("device-invite", {
+        targetId,
+        sessionCode,
+        senderDevice: deviceInfo,
+      });
+    }
+  };
+
+  const acceptDeviceInvite = (senderId: string, sessionCode: string) => {
+    if (socketRef.current) {
+      console.log("[Socket] Accepting device invite from:", senderId);
+      socketRef.current.emit("device-invite-accept", { senderId, sessionCode });
+      setIncomingInvite(null);
+    }
+  };
+
+  const declineDeviceInvite = () => {
+    setIncomingInvite(null);
+  };
 
   const createRoom = (sessionCode: string): Promise<{ success: boolean }> => {
     return new Promise((resolve) => {
@@ -103,6 +140,10 @@ export function useSocket() {
     deviceInfo,
     activeDevices,
     currentSessionCode,
+    incomingInvite,
+    sendDeviceInvite,
+    acceptDeviceInvite,
+    declineDeviceInvite,
     createRoom,
     joinRoom,
   };
