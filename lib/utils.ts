@@ -55,9 +55,32 @@ export function detectBrowser(): string {
 }
 
 export function generateRandomDeviceName(): string {
+  if (typeof window === "undefined") return "AirDropX Device";
+
+  // Check if user saved a custom device name in settings
+  const saved = localStorage.getItem("airdropx_device_name");
+  if (saved && saved.trim()) return saved.trim();
+
+  const ua = window.navigator.userAgent;
   const os = detectOS();
-  const osName = os.charAt(0).toUpperCase() + os.slice(1);
-  const adjectives = ["Neon", "Cyber", "Quantum", "Swift", "Aero", "Starlight", "Solar", "Vortex"];
-  const randAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  return `${randAdj} ${osName}`;
+  const browser = detectBrowser();
+
+  if (os === "ios") {
+    if (ua.includes("iPad")) return "iPad";
+    return "iPhone";
+  }
+  if (os === "mac") return "MacBook Pro";
+  if (os === "android") {
+    if (ua.includes("Samsung") || ua.includes("SM-")) return "Samsung Galaxy";
+    if (ua.includes("Pixel")) return "Google Pixel";
+    if (ua.includes("OnePlus")) return "OnePlus Phone";
+    if (ua.includes("Xiaomi") || ua.includes("Redmi")) return "Xiaomi Phone";
+    return "Android Phone";
+  }
+  if (os === "windows") {
+    return `Windows PC (${browser})`;
+  }
+  if (os === "linux") return `Linux Workstation`;
+
+  return `${browser} Device`;
 }
