@@ -5,8 +5,48 @@ import { P2PConnectionManager } from "../lib/webrtc";
 import { IncomingFileMeta, TransferProgressState } from "../types";
 import { Socket } from "socket.io-client";
 
+export function getExtension(filename: string): string {
+  const parts = filename.split(".");
+  if (parts.length < 2) return "";
+  return parts.pop()?.toLowerCase() || "";
+}
+
+export function detectMimeType(name: string, type: string): string {
+  if (type && type !== "application/octet-stream") return type;
+  const ext = getExtension(name);
+  const map: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+    gif: "image/gif",
+    heic: "image/heic",
+    heif: "image/heic",
+    svg: "image/svg+xml",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    avi: "video/x-msvideo",
+    webm: "video/webm",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    ogg: "audio/ogg",
+    pdf: "application/pdf",
+    txt: "text/plain",
+    json: "application/json",
+    csv: "text/csv",
+    zip: "application/zip",
+    tar: "application/x-tar",
+    gz: "application/gzip",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  };
+  return map[ext] || type || "application/octet-stream";
+}
+
 export function ensureFileExtension(name: string, type: string): string {
-  if (name.includes(".") && !name.endsWith(".")) return name;
+  const existingExt = getExtension(name);
+  if (existingExt) return name;
+
   const mimeMap: Record<string, string> = {
     "image/jpeg": ".jpg",
     "image/jpg": ".jpg",
@@ -24,8 +64,10 @@ export function ensureFileExtension(name: string, type: string): string {
     "audio/wav": ".wav",
     "audio/ogg": ".ogg",
     "application/pdf": ".pdf",
+    "text/plain": ".txt",
+    "application/json": ".json",
+    "text/csv": ".csv",
     "application/zip": ".zip",
-    "application/x-tar": ".tar",
   };
   const ext = mimeMap[(type || "").toLowerCase()] || "";
   return ext ? `${name}${ext}` : name;
@@ -231,21 +273,29 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       if (chunk) chunkArray.push(chunk);
     }
 
-    const mimeType = incomingMeta?.type || "application/octet-stream";
     const rawName = incomingMeta?.name || "transferred_file";
+    const mimeType = detectMimeType(rawName, incomingMeta?.type || "");
     const finalDownloadName = ensureFileExtension(rawName, mimeType);
+
+    console.log(`[WebRTC] Assembling Blob with Name: "${finalDownloadName}", MIME: "${mimeType}"`);
 
     const blob = new Blob(chunkArray, { type: mimeType });
     const url = URL.createObjectURL(blob);
     setCompletedBlobUrl(url);
 
-    // Auto-trigger browser download with original extension
+    // Auto-trigger browser download with exact original name and extension
     const a = document.createElement("a");
     a.href = url;
     a.download = finalDownloadName;
+    a.setAttribute("download", finalDownloadName);
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+
+    setTimeout(() => {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a);
+      }
+    }, 1000);
   };
 
   // Start sending file handshake
@@ -255,11 +305,12 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       return;
     }
 
+    const detectedType = detectMimeType(file.name, file.type);
     const fileMeta: IncomingFileMeta = {
       id: Date.now().toString(),
       name: file.name,
       size: file.size,
-      type: file.type || "application/octet-stream",
+      type: detectedType,
       totalChunks: Math.ceil(file.size / (chunkSizeKb * 1024)),
       iv: "",
       salt: "",
@@ -279,12 +330,12 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       speedBps: 0,
       etaSeconds: 0,
       percentage: 0,
-      status: "connecting", // Waiting for receiver to accept
+      status: "connecting",
       isSender: true,
     });
 
     if (socket) {
-      console.log("[WebRTC] Emitting file-meta handshake to receiver...");
+      console.log("[WebRTC] Emitting file-meta handshake with name:", file.name, "type:", detectedType);
       socket.emit("file-meta", { sessionCode, fileMeta });
     }
   };
