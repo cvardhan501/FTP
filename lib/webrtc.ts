@@ -230,15 +230,31 @@ export class P2PConnectionManager {
         payloadBuffer = finalBuffer.buffer;
       }
 
-      if (this.dataChannel.bufferedAmount > 8 * 1024 * 1024) {
+      // Robust Flow Control with 50ms Safety Polling Fallback (Never hangs at 50%)
+      if (this.dataChannel.bufferedAmount > 4 * 1024 * 1024) {
         await new Promise<void>((resolve) => {
-          if (!this.dataChannel) return resolve();
-          this.dataChannel.bufferedAmountLowThreshold = 2 * 1024 * 1024;
-          const onLow = () => {
+          let checkInterval: any = null;
+          let doneCalled = false;
+
+          const done = () => {
+            if (doneCalled) return;
+            doneCalled = true;
+            if (checkInterval) clearInterval(checkInterval);
             if (this.dataChannel) this.dataChannel.onbufferedamountlow = null;
             resolve();
           };
-          this.dataChannel.onbufferedamountlow = onLow;
+
+          if (this.dataChannel) {
+            this.dataChannel.bufferedAmountLowThreshold = 1024 * 1024;
+            this.dataChannel.onbufferedamountlow = done;
+          }
+
+          // Polling check every 50ms ensures loop never freezes even if event fails
+          checkInterval = setInterval(() => {
+            if (!this.dataChannel || this.dataChannel.bufferedAmount <= 1024 * 1024) {
+              done();
+            }
+          }, 50);
         });
       }
 
@@ -249,8 +265,8 @@ export class P2PConnectionManager {
 
       const now = Date.now();
       const timeDiff = (now - lastTime) / 1000;
-      if (timeDiff >= 0.2 || i === totalChunks - 1) {
-        const speedBps = bytesSinceLast / timeDiff;
+      if (timeDiff >= 0.1 || i === totalChunks - 1) {
+        const speedBps = bytesSinceLast / (timeDiff || 0.001);
         if (onProgress) onProgress(sentBytes, totalSize, speedBps);
         lastTime = now;
         bytesSinceLast = 0;

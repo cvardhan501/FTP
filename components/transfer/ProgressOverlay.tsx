@@ -55,7 +55,7 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({
         <div className="space-y-2">
           <div className="w-full h-3.5 bg-slate-950 rounded-full overflow-hidden border border-white/10 p-0.5 relative">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full transition-all duration-300 shadow-lg shadow-blue-500/50"
+              className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full transition-all duration-150 ease-out shadow-lg shadow-blue-500/50"
               style={{ width: `${state.percentage}%` }}
             />
           </div>

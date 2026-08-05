@@ -100,13 +100,26 @@ export default function Home() {
     };
   }, [socket, sfx]);
 
-  // Audio & Confetti on transfer completion
+  const hasTriggeredCompletionRef = React.useRef<string | null>(null);
+
+  // Audio & Confetti on transfer completion (Once per transfer)
   useEffect(() => {
-    if (progressState?.status === "completed") {
+    if (
+      progressState?.status === "completed" &&
+      progressState.transferId &&
+      hasTriggeredCompletionRef.current !== progressState.transferId
+    ) {
+      hasTriggeredCompletionRef.current = progressState.transferId;
       sfx.playSuccess();
       try {
         if (typeof confetti === "function") {
-          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+          confetti({
+            particleCount: 50,
+            spread: 60,
+            origin: { y: 0.6 },
+            ticks: 120,
+            disableForReducedMotion: true,
+          });
         }
       } catch (e) {}
 
@@ -130,7 +143,7 @@ export default function Home() {
     } else if (progressState?.status === "error") {
       sfx.playError();
     }
-  }, [progressState?.status, sfx]);
+  }, [progressState?.status, progressState?.transferId, sfx]);
 
   const handleAddFiles = (newFiles: File[]) => {
     const items: FileItem[] = newFiles.map((file) => ({
