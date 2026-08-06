@@ -24,6 +24,15 @@ export const TransferCompleteModal: React.FC<TransferCompleteModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-fadeIn">
       <div className="glass-panel w-full max-w-sm p-6 sm:p-8 rounded-[36px] relative border border-emerald-500/40 shadow-2xl space-y-6 text-center">
+        {/* Top Right Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+          title="Close Modal"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
         {/* Big Green Checkmark Icon */}
         <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-emerald-500 to-green-400 p-0.5 mx-auto shadow-2xl shadow-emerald-500/40 flex items-center justify-center animate-bounce">
           <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center text-emerald-400">

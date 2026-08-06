@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { IncomingFileMeta } from "../../types";
 import { Download, Camera, Wifi, ShieldCheck, FileCheck, X, Check } from "lucide-react";
 import { Button, Card, Badge } from "../ui";
@@ -31,6 +31,13 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
   const [sessionCodeInput, setSessionCodeInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dismissedCompleted, setDismissedCompleted] = useState(false);
+
+  useEffect(() => {
+    if (completedBlobUrl) {
+      setDismissedCompleted(false);
+    }
+  }, [completedBlobUrl]);
 
   const activeFileName = incomingMeta?.name || fileName || "File";
 
@@ -109,8 +116,15 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
       )}
 
       {/* Completed Download Banner */}
-      {completedBlobUrl && (
-        <Card className="max-w-md mx-auto border-blue-500/40 text-center space-y-3 bg-blue-950/30">
+      {completedBlobUrl && !dismissedCompleted && (
+        <Card className="max-w-md mx-auto border-blue-500/40 text-center space-y-3 bg-blue-950/30 relative">
+          <button
+            onClick={() => setDismissedCompleted(true)}
+            className="absolute top-3 right-3 text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            title="Dismiss card"
+          >
+            <X className="w-5 h-5" />
+          </button>
           <div className="w-12 h-12 rounded-full bg-blue-500/20 text-blue-400 mx-auto flex items-center justify-center">
             <FileCheck className="w-6 h-6" />
           </div>
@@ -119,7 +133,7 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
           <a
             href={completedBlobUrl}
             download={activeFileName}
-            className="inline-flex items-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs gap-2"
+            className="inline-flex items-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs gap-2 shadow-lg shadow-blue-600/30"
           >
             <Download className="w-4 h-4" /> Download {activeFileName}
           </a>
