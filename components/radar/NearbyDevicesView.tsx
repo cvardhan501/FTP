@@ -51,41 +51,43 @@ export const NearbyDevicesView: React.FC<NearbyDevicesViewProps> = ({
 
       {/* Device List */}
       <div className="space-y-3">
-        {activeDevices.map((dev) => (
-          <div
-            key={dev.id}
-            className="p-4 rounded-2xl bg-slate-900/80 border border-white/10 flex items-center justify-between hover:border-blue-500/40 transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold">
-                {dev.os === "ios" || dev.os === "mac" ? (
-                  <Apple className="w-5 h-5" />
-                ) : dev.os === "windows" ? (
-                  <Laptop className="w-5 h-5" />
-                ) : (
-                  <Smartphone className="w-5 h-5" />
-                )}
-              </div>
-              <div>
-                <h3 className="font-bold text-white text-sm">{dev.name}</h3>
-                <p className="text-[11px] text-slate-400 font-mono">
-                  {dev.signalStrength || "Strong"} Signal • Ready
-                </p>
-              </div>
-            </div>
-
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onConnectDevice(dev.id)}
-              className="py-1.5 px-4 text-xs font-bold"
+        {activeDevices
+          .filter((dev) => !dev.isSelf)
+          .map((dev) => (
+            <div
+              key={dev.id}
+              className="p-4 rounded-2xl bg-slate-900/80 border border-white/10 flex items-center justify-between hover:border-blue-500/40 transition-all shadow-md"
             >
-              Connect
-            </Button>
-          </div>
-        ))}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold border border-purple-500/20">
+                  {dev.os === "ios" || dev.os === "mac" ? (
+                    <Apple className="w-5 h-5 text-slate-200" />
+                  ) : dev.os === "windows" ? (
+                    <Laptop className="w-5 h-5 text-blue-400" />
+                  ) : (
+                    <Smartphone className="w-5 h-5 text-purple-400" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">{dev.name}</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    {dev.os.toUpperCase()} • {dev.browser || "AirDropX"} • Ready
+                  </p>
+                </div>
+              </div>
 
-        {activeDevices.length === 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => onConnectDevice(dev.id)}
+                className="py-1.5 px-4 text-xs font-bold bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border-blue-500/40"
+              >
+                Connect
+              </Button>
+            </div>
+          ))}
+
+        {activeDevices.filter((dev) => !dev.isSelf).length === 0 && (
           <Card className="text-center py-6 space-y-2 border-white/5">
             <p className="text-xs text-slate-400">Scanning Wi-Fi network for nearby devices...</p>
             <p className="text-[11px] text-slate-500">Open AirDropX on recipient device to discover automatically.</p>

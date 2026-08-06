@@ -130,42 +130,49 @@ export const HomeView: React.FC<HomeViewProps> = ({
       {/* Nearby Devices Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white">Nearby Devices</h3>
+          <h3 className="text-sm font-bold text-white">Nearby Discovered Devices</h3>
           <Badge variant="blue" className="text-[10px]">
-            {activeDevices.length} Active
+            {activeDevices.filter((d) => !d.isSelf).length} Active
           </Badge>
         </div>
 
         <div className="space-y-2">
-          {activeDevices.map((dev) => (
-            <div
-              key={dev.id}
-              className="p-3 rounded-2xl bg-slate-900/80 border border-white/10 flex items-center justify-between text-xs hover:border-blue-500/40 transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
-                  <Smartphone className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="font-bold text-white">{dev.name}</p>
-                  <p className="text-[10px] text-slate-400">Tap to connect</p>
-                </div>
-              </div>
-
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => onConnectDevice && onConnectDevice(dev.id)}
-                className="py-1 px-3 text-xs"
+          {activeDevices
+            .filter((dev) => !dev.isSelf)
+            .map((dev) => (
+              <div
+                key={dev.id}
+                className="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10 flex items-center justify-between text-xs hover:border-blue-500/40 transition-all shadow-md"
               >
-                Connect
-              </Button>
-            </div>
-          ))}
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold shrink-0 border border-purple-500/20">
+                    {dev.os === "ios" || dev.os === "mac" ? "🍎" : dev.os === "windows" ? "🪟" : dev.os === "android" ? "🤖" : "💻"}
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="font-bold text-white text-sm truncate">{dev.name}</p>
+                    <p className="text-[10px] text-slate-400 font-mono">
+                      {dev.os.toUpperCase()} • {dev.browser} • Ready
+                    </p>
+                  </div>
+                </div>
 
-          {activeDevices.length === 0 && (
-            <div className="p-4 text-center text-xs text-slate-500 bg-slate-900/40 rounded-2xl border border-white/5">
-              Searching for devices on local network...
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onConnectDevice && onConnectDevice(dev.id)}
+                  className="py-1.5 px-3.5 text-xs font-bold shrink-0 bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border-blue-500/40"
+                >
+                  Connect
+                </Button>
+              </div>
+            ))}
+
+          {activeDevices.filter((dev) => !dev.isSelf).length === 0 && (
+            <div className="p-5 text-center text-xs text-slate-400 bg-slate-900/40 rounded-2xl border border-white/5 space-y-1">
+              <p className="font-medium text-slate-300">Searching for devices on local Wi-Fi...</p>
+              <p className="text-[11px] text-slate-500">
+                Open AirDropX on recipient device to discover automatically.
+              </p>
             </div>
           )}
         </div>

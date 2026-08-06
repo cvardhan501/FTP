@@ -102,6 +102,13 @@ export function useSocket() {
       setIncomingInvite(invite);
     });
 
+    socket.on("device-invite-accepted", ({ sessionCode }: { sessionCode: string }) => {
+      console.log("[Socket] Sender received invite accepted notification. Auto joining room:", sessionCode);
+      if (socketRef.current) {
+        socketRef.current.emit("join-room", { sessionCode });
+      }
+    });
+
     // Heartbeat every 5 seconds to stay active in radar
     const heartbeatTimer = setInterval(() => {
       if (socket.connected) {
@@ -114,6 +121,18 @@ export function useSocket() {
       socket.disconnect();
     };
   }, []);
+
+  const updateDeviceName = (newName: string) => {
+    if (!newName.trim()) return;
+    setDeviceInfo((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, name: newName.trim() };
+      if (socketRef.current && socketRef.current.connected) {
+        socketRef.current.emit("announce-device", updated);
+      }
+      return updated;
+    });
+  };
 
   const sendDeviceInvite = (targetId: string, sessionCode: string) => {
     if (socketRef.current && deviceInfo) {
@@ -130,6 +149,7 @@ export function useSocket() {
     if (socketRef.current) {
       console.log("[Socket] Accepting device invite from:", senderId);
       socketRef.current.emit("device-invite-accept", { senderId, sessionCode });
+      socketRef.current.emit("join-room", { sessionCode, deviceData: deviceInfo });
       setIncomingInvite(null);
     }
   };
@@ -169,6 +189,7 @@ export function useSocket() {
     activeDevices,
     currentSessionCode,
     incomingInvite,
+    updateDeviceName,
     sendDeviceInvite,
     acceptDeviceInvite,
     declineDeviceInvite,

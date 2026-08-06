@@ -27,6 +27,7 @@ import { TransferCompleteModal } from "../components/transfer/TransferCompleteMo
 import { IncomingFileModal } from "../components/receive/IncomingFileModal";
 import { AIAssistantModal } from "../components/ai/AIAssistantModal";
 import { SettingsModal } from "../components/settings/SettingsModal";
+import { DeviceInviteModal } from "../components/radar/DeviceInviteModal";
 import { Button, Badge } from "../components/ui";
 import { Download, WifiOff } from "lucide-react";
 
@@ -56,6 +57,7 @@ export default function Home() {
     isConnected,
     activeDevices,
     incomingInvite,
+    updateDeviceName,
     sendDeviceInvite,
     acceptDeviceInvite,
     declineDeviceInvite,
@@ -209,6 +211,9 @@ export default function Home() {
     const updated = { ...settings, ...newSt };
     setSettings(updated);
     saveStoredSettings(updated);
+    if (newSt.deviceName) {
+      updateDeviceName(newSt.deviceName);
+    }
   };
 
   const handleSelectMode = (mode: AppMode) => {
@@ -368,6 +373,17 @@ export default function Home() {
         onClose={() => setSettingsOpen(false)}
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
+      />
+
+      {/* Device Discovery Pairing Request Modal */}
+      <DeviceInviteModal
+        invite={incomingInvite}
+        onAccept={(senderId, sCode) => {
+          setSessionCode(sCode);
+          acceptDeviceInvite(senderId, sCode);
+          setCurrentMode("receive");
+        }}
+        onDecline={declineDeviceInvite}
       />
     </div>
   );

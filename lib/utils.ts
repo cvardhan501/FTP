@@ -57,30 +57,37 @@ export function detectBrowser(): string {
 export function generateRandomDeviceName(): string {
   if (typeof window === "undefined") return "AirDropX Device";
 
-  // Check if user saved a custom device name in settings
-  const saved = localStorage.getItem("airdropx_device_name");
-  if (saved && saved.trim()) return saved.trim();
+  // Check stored settings
+  try {
+    const raw = localStorage.getItem("airdropx_app_settings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.deviceName && parsed.deviceName.trim()) {
+        return parsed.deviceName.trim();
+      }
+    }
+  } catch (e) {}
 
   const ua = window.navigator.userAgent;
   const os = detectOS();
   const browser = detectBrowser();
 
   if (os === "ios") {
-    if (ua.includes("iPad")) return "iPad";
-    return "iPhone";
+    if (ua.includes("iPad")) return "iPad Air";
+    return "iPhone 15 Pro";
   }
   if (os === "mac") return "MacBook Pro";
   if (os === "android") {
-    if (ua.includes("Samsung") || ua.includes("SM-")) return "Samsung Galaxy";
-    if (ua.includes("Pixel")) return "Google Pixel";
-    if (ua.includes("OnePlus")) return "OnePlus Phone";
-    if (ua.includes("Xiaomi") || ua.includes("Redmi")) return "Xiaomi Phone";
-    return "Android Phone";
+    if (ua.includes("Samsung") || ua.includes("SM-")) return "Samsung Galaxy S24";
+    if (ua.includes("Pixel")) return "Google Pixel 8";
+    if (ua.includes("OnePlus")) return "OnePlus 12";
+    if (ua.includes("Xiaomi") || ua.includes("Redmi")) return "Xiaomi 14";
+    return "Android Smartphone";
   }
   if (os === "windows") {
-    return `Windows PC (${browser})`;
+    return `Windows 11 PC (${browser})`;
   }
-  if (os === "linux") return `Linux Workstation`;
+  if (os === "linux") return `Linux Workstation (${browser})`;
 
   return `${browser} Device`;
 }
