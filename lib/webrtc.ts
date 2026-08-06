@@ -236,15 +236,15 @@ export class P2PConnectionManager {
         payloadBuffer = finalBuffer.buffer;
       }
 
-      // Precise P2P Flow Control Pacing: Keep bufferedAmount under 128KB to prevent SCTP socket drops
-      while (this.dataChannel && this.dataChannel.bufferedAmount > 128 * 1024) {
+      // High-Speed Flow Control Pacing: Keep bufferedAmount under 512KB for maximum throughput
+      while (this.dataChannel && this.dataChannel.bufferedAmount > 512 * 1024) {
         if (this.isCancelled) return;
-        await new Promise((res) => setTimeout(res, 2));
+        await new Promise((res) => setTimeout(res, 0));
       }
 
-      // Micro-yield every 4 chunks to ensure smooth WebRTC network transmission
-      if (i % 4 === 0) {
-        await new Promise((res) => setTimeout(res, 1));
+      // Non-blocking micro-yield every 16 chunks
+      if (i % 16 === 0) {
+        await new Promise((res) => setTimeout(res, 0));
       }
 
       // Safe Send with Retry Recovery

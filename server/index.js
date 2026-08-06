@@ -9,6 +9,7 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"],
   },
+  maxHttpBufferSize: 1e8, // 100 MB payload buffer for ultra high-speed binary streaming
 });
 
 const PORT = process.env.PORT || 3001;
@@ -161,11 +162,12 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("file-chunk-stream", ({ targetId, sessionCode, chunkIndex, totalChunks, dataHex }) => {
+  socket.on("file-chunk-stream", ({ targetId, sessionCode, chunkIndex, totalChunks, data, dataHex }) => {
+    const payload = data !== undefined ? data : dataHex;
     if (targetId) {
-      io.to(targetId).emit("file-chunk-stream", { chunkIndex, totalChunks, dataHex });
+      io.to(targetId).emit("file-chunk-stream", { chunkIndex, totalChunks, data: payload, dataHex });
     } else if (sessionCode) {
-      socket.to(sessionCode).emit("file-chunk-stream", { chunkIndex, totalChunks, dataHex });
+      socket.to(sessionCode).emit("file-chunk-stream", { chunkIndex, totalChunks, data: payload, dataHex });
     }
   });
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { P2PConnectionManager } from "../lib/webrtc";
 import { IncomingFileMeta, TransferProgressState } from "../types";
 import { Socket } from "socket.io-client";
+import { decryptChunk, encryptChunk, generateRandomIV } from "../lib/crypto";
 
 export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
   const p2pRef = useRef<P2PConnectionManager | null>(null);
@@ -156,10 +157,20 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       }
     };
 
-    const handleFileChunkStream = async ({ chunkIndex, totalChunks, dataHex }: { chunkIndex: number; totalChunks: number; dataHex: string }) => {
-      const matches = dataHex.match(/.{1,2}/g);
-      if (!matches) return;
-      const rawBytes = new Uint8Array(matches.map((b) => parseInt(b, 16))).buffer;
+    const handleFileChunkStream = async ({ chunkIndex, totalChunks, data, dataHex }: { chunkIndex: number; totalChunks: number; data?: ArrayBuffer | any; dataHex?: string }) => {
+      let rawBytes: ArrayBuffer;
+      if (data && data instanceof ArrayBuffer) {
+        rawBytes = data;
+      } else if (data && typeof Buffer !== "undefined" && Buffer.isBuffer(data)) {
+        rawBytes = (data as any).buffer.slice((data as any).byteOffset, (data as any).byteOffset + (data as any).byteLength);
+      } else if (dataHex) {
+        const matches = dataHex.match(/.{1,2}/g);
+        if (!matches) return;
+        rawBytes = new Uint8Array(matches.map((b) => parseInt(b, 16))).buffer;
+      } else {
+        return;
+      }
+
       if (rawBytes.byteLength < 8) return;
 
       const view = new DataView(rawBytes);
@@ -171,7 +182,6 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
         const iv = new Uint8Array(rawBytes.slice(8, 20));
         const encBody = rawBytes.slice(20);
         try {
-          const { decryptChunk } = await import("../lib/crypto");
           actualBytes = await decryptChunk(p2pRef.current.cryptoKey, encBody, iv);
         } catch (err) {
           actualBytes = encBody;
@@ -256,7 +266,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
             );
           }
         } else {
-          console.log("[WebRTC] DataChannel not open. Initiating high-speed Socket Fallback Stream!");
+          console.log("[WebRTC] DataChannel not open. Initiating ultra-high-speed Direct ArrayBuffer Socket Stream!");
           try {
             const chunkSize = chunkSizeKb * 1024;
             const totalSize = file.size;
@@ -276,7 +286,6 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
               let payloadBuf: ArrayBuffer;
               if (p2pRef.current?.cryptoKey) {
-                const { encryptChunk, generateRandomIV } = await import("../lib/crypto");
                 const iv = generateRandomIV();
                 const enc = await encryptChunk(p2pRef.current.cryptoKey, rawBuf, iv);
                 const finalBuf = new Uint8Array(8 + 12 + enc.byteLength);
@@ -291,11 +300,8 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
                 payloadBuf = finalBuf.buffer;
               }
 
-              const hexStr = Array.from(new Uint8Array(payloadBuf))
-                .map((b) => b.toString(16).padStart(2, "0"))
-                .join("");
-
-              socket?.emit("file-chunk-stream", { sessionCode, chunkIndex: i, totalChunks, dataHex: hexStr });
+              // Direct binary ArrayBuffer payload (zero hex string conversion overhead!)
+              socket?.emit("file-chunk-stream", { sessionCode, chunkIndex: i, totalChunks, data: payloadBuf });
               sentBytes += end - start;
               const pct = Math.min(99, Math.round((sentBytes / totalSize) * 100));
 
