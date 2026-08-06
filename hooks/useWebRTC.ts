@@ -506,6 +506,9 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
   const cancelTransfer = () => {
     p2pRef.current?.cancelTransfer();
+    if (socket && sessionCode) {
+      socket.emit("file-reject", { sessionCode, transferId: sendProgressState?.transferId || receiveProgressState?.transferId });
+    }
     setSendProgressState(null);
     setReceiveProgressState(null);
     incomingMetaRef.current = null;

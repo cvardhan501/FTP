@@ -231,9 +231,14 @@ export class P2PConnectionManager {
         payloadBuffer = finalBuffer.buffer;
       }
 
-      // High Performance Pacing: Keep bufferedAmount under 1MB to maximize pipe saturation
-      while (this.dataChannel && this.dataChannel.bufferedAmount > 1024 * 1024) {
+      // Precise P2P Flow Control Pacing: Keep bufferedAmount under 128KB to prevent SCTP socket drops
+      while (this.dataChannel && this.dataChannel.bufferedAmount > 128 * 1024) {
         if (this.isCancelled) return;
+        await new Promise((res) => setTimeout(res, 2));
+      }
+
+      // Micro-yield every 4 chunks to ensure smooth WebRTC network transmission
+      if (i % 4 === 0) {
         await new Promise((res) => setTimeout(res, 1));
       }
 
@@ -265,6 +270,12 @@ export class P2PConnectionManager {
         lastTime = now;
         bytesSinceLast = 0;
       }
+    }
+
+    // Drain remaining buffered chunks over WebRTC wire before completing
+    while (this.dataChannel && this.dataChannel.bufferedAmount > 0) {
+      if (this.isCancelled) return;
+      await new Promise((res) => setTimeout(res, 5));
     }
   }
 

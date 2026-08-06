@@ -347,7 +347,10 @@ export default function Home() {
       {/* Transfer Complete Modal (Matches Screen 7) */}
       <TransferCompleteModal
         isOpen={completionModalOpen}
-        onClose={() => setCompletionModalOpen(false)}
+        onClose={() => {
+          setCompletionModalOpen(false);
+          cancelTransfer();
+        }}
         fileName={progressState?.fileName}
         fileSize={progressState?.fileSize}
         completedBlobUrl={completedBlobUrl}
