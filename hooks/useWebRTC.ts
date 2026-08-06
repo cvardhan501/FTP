@@ -98,6 +98,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
     const handlePeerJoined = async ({ peerId }: { peerId: string }) => {
       console.log("[WebRTC] Peer joined room. Sender initiating offer to:", peerId);
+      setPeerConnected(true);
       const manager = await initP2P(true);
       const offer = await manager.createOffer();
       socket.emit("signal-offer", { targetId: peerId, offer, sessionCode });
@@ -105,6 +106,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
     const handleSignalOffer = async ({ senderId, offer }: { senderId: string; offer: RTCSessionDescriptionInit }) => {
       console.log("[WebRTC] Offer received from sender:", senderId);
+      setPeerConnected(true);
       const manager = await initP2P(false);
       const answer = await manager.handleOffer(offer);
       console.log("[WebRTC] Sending answer back to sender:", senderId);
@@ -113,9 +115,15 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
     const handleSignalAnswer = async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
       console.log("[WebRTC] Answer received from receiver");
+      setPeerConnected(true);
       if (p2pRef.current) {
         await p2pRef.current.handleAnswer(answer);
       }
+    };
+
+    const handlePeerLeft = () => {
+      console.log("[WebRTC] Peer left session room");
+      setPeerConnected(false);
     };
 
     const handleSignalIce = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
@@ -306,6 +314,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     };
 
     socket.on("peer-joined", handlePeerJoined);
+    socket.on("peer-left", handlePeerLeft);
     socket.on("signal-offer", handleSignalOffer);
     socket.on("signal-answer", handleSignalAnswer);
     socket.on("signal-ice", handleSignalIce);
@@ -316,6 +325,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
     return () => {
       socket.off("peer-joined", handlePeerJoined);
+      socket.off("peer-left", handlePeerLeft);
       socket.off("signal-offer", handleSignalOffer);
       socket.off("signal-answer", handleSignalAnswer);
       socket.off("signal-ice", handleSignalIce);
