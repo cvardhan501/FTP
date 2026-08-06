@@ -25,6 +25,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
   // Buffer map for assembling incoming file chunks
   const incomingChunksRef = useRef<Map<number, ArrayBuffer>>(new Map());
   const receivedChunksCountRef = useRef(0);
+  const lastProgressUpdateRef = useRef(0);
 
   // Initialize P2P connection manager
   const initP2P = useCallback(
@@ -60,17 +61,21 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
         const total = totalChunks;
         const pct = Math.min(100, Math.round((count / total) * 100));
 
-        setReceiveProgressState((prev) => {
-          if (!prev) return null;
-          const transferred = (count / total) * prev.fileSize;
-          return {
-            ...prev,
-            currentChunk: count,
-            transferredBytes: transferred,
-            percentage: pct,
-            status: count >= total ? "completed" : "transferring",
-          };
-        });
+        const now = Date.now();
+        if (count >= total || now - lastProgressUpdateRef.current > 60) {
+          lastProgressUpdateRef.current = now;
+          setReceiveProgressState((prev) => {
+            if (!prev) return null;
+            const transferred = (count / total) * prev.fileSize;
+            return {
+              ...prev,
+              currentChunk: count,
+              transferredBytes: transferred,
+              percentage: pct,
+              status: count >= total ? "completed" : "transferring",
+            };
+          });
+        }
 
         if (count >= totalChunks) {
           assembleReceivedFile(totalChunks);
@@ -182,17 +187,21 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       const total = totChunks || totalChunks;
       const pct = Math.min(100, Math.round((count / total) * 100));
 
-      setReceiveProgressState((prev) => {
-        if (!prev) return null;
-        const transferred = (count / total) * prev.fileSize;
-        return {
-          ...prev,
-          currentChunk: count,
-          transferredBytes: transferred,
-          percentage: pct,
-          status: count >= total ? "completed" : "transferring",
-        };
-      });
+      const now = Date.now();
+      if (count >= total || now - lastProgressUpdateRef.current > 60) {
+        lastProgressUpdateRef.current = now;
+        setReceiveProgressState((prev) => {
+          if (!prev) return null;
+          const transferred = (count / total) * prev.fileSize;
+          return {
+            ...prev,
+            currentChunk: count,
+            transferredBytes: transferred,
+            percentage: pct,
+            status: count >= total ? "completed" : "transferring",
+          };
+        });
+      }
 
       if (count >= total) {
         assembleReceivedFile(total);
@@ -296,7 +305,9 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
                     }
                   : null
               );
-              await new Promise((res) => setTimeout(res, 5));
+              if (i % 16 === 0) {
+                await new Promise((res) => setTimeout(res, 0));
+              }
             }
           } catch (err: any) {
             console.error("[WebRTC] Fallback streaming error:", err);

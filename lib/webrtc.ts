@@ -231,10 +231,10 @@ export class P2PConnectionManager {
         payloadBuffer = finalBuffer.buffer;
       }
 
-      // Smart Pacing: Keep bufferedAmount under 256KB to avoid WebRTC queue chokes
-      while (this.dataChannel && this.dataChannel.bufferedAmount > 256 * 1024) {
+      // High Performance Pacing: Keep bufferedAmount under 1MB to maximize pipe saturation
+      while (this.dataChannel && this.dataChannel.bufferedAmount > 1024 * 1024) {
         if (this.isCancelled) return;
-        await new Promise((res) => setTimeout(res, 4));
+        await new Promise((res) => setTimeout(res, 1));
       }
 
       // Safe Send with Retry Recovery

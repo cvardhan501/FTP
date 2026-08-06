@@ -11,7 +11,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   desktopNotifications: true,
   autoSaveDownloads: true,
   autoAcceptFiles: false,
-  chunkSizeKb: 64,
+  chunkSizeKb: 256,
   deviceName: "AirDropX Device",
 };
 

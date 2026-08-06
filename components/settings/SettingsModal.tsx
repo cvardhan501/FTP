@@ -266,10 +266,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onChange={(e) => onUpdateSettings({ chunkSizeKb: Number(e.target.value) })}
                       className="bg-slate-950 border border-white/20 rounded-xl px-3 py-2 text-xs text-blue-400 font-mono font-bold focus:outline-none"
                     >
-                      <option value={32}>32 KB (Safe / Low Latency)</option>
-                      <option value={64}>64 KB (Balanced Default)</option>
-                      <option value={128}>128 KB (High Speed Local)</option>
-                      <option value={256}>256 KB (Maximum Throughput)</option>
+                      <option value={128}>128 KB (Balanced)</option>
+                      <option value={256}>256 KB (High Speed Default)</option>
+                      <option value={512}>512 KB (Extreme Turbo)</option>
+                      <option value={1024}>1024 KB (1 MB Ultra Pipe for 15GB+ Files)</option>
                     </select>
                   </div>
                 </div>
