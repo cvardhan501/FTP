@@ -139,6 +139,14 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
         const { file, chunkSizeKb } = pendingFileRef.current;
         setProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
 
+        // If DataChannel is connecting, wait up to 2 seconds for channel open
+        let attempts = 0;
+        while (p2pRef.current.dataChannel?.readyState !== "open" && attempts < 20) {
+          console.log("[WebRTC] DataChannel connecting... waiting 100ms");
+          await new Promise((res) => setTimeout(res, 100));
+          attempts++;
+        }
+
         try {
           await p2pRef.current.sendFile(file, chunkSizeKb, (sent, total, speed) => {
             const pct = Math.min(100, Math.round((sent / total) * 100));
@@ -159,6 +167,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
             );
           });
         } catch (err: any) {
+          console.error("[WebRTC] Error streaming file over P2P DataChannel:", err);
           setProgressState((prev) =>
             prev
               ? {
@@ -310,15 +319,19 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     });
 
     if (socket) {
-      socket.emit("file-accept", { targetId: meta.senderId, transferId: meta.id });
+      socket.emit("file-accept", { targetId: meta.senderId, sessionCode, transferId: meta.id });
     }
+
+    // Dismiss incoming modal so loading/progress card displays cleanly!
+    incomingMetaRef.current = null;
+    setIncomingMeta(null);
   };
 
   const rejectIncomingFile = () => {
     const meta = incomingMetaRef.current;
     if (!meta) return;
     if (socket) {
-      socket.emit("file-reject", { targetId: meta.senderId, transferId: meta.id });
+      socket.emit("file-reject", { targetId: meta.senderId, sessionCode, transferId: meta.id });
     }
     incomingMetaRef.current = null;
     setIncomingMeta(null);

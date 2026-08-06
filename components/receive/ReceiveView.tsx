@@ -104,37 +104,7 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
         </Card>
       )}
 
-      {/* Incoming File Offer Prompt Modal */}
-      {incomingMeta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="glass-panel w-full max-w-md p-6 rounded-3xl relative border border-blue-500/40 shadow-2xl space-y-6 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/40 text-blue-400 mx-auto flex items-center justify-center">
-              <FileCheck className="w-8 h-8" />
-            </div>
 
-            <div>
-              <Badge variant="blue" className="mb-2">Incoming Encrypted File</Badge>
-              <h2 className="text-xl font-bold text-white">{incomingMeta.name}</h2>
-              <p className="text-xs text-slate-400 font-mono mt-1">
-                Size: {formatBytes(incomingMeta.size)} • {incomingMeta.totalChunks} Chunks
-              </p>
-            </div>
-
-            <div className="bg-slate-900/80 p-3 rounded-xl border border-white/10 text-xs text-slate-300 flex items-center justify-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" /> WebCrypto AES-256 E2E Encryption Active
-            </div>
-
-            <div className="flex gap-3">
-              <Button variant="ghost" className="flex-1 py-3" onClick={onRejectFile}>
-                <X className="w-4 h-4 mr-1 text-rose-400" /> Decline
-              </Button>
-              <Button variant="primary" className="flex-1 py-3" onClick={onAcceptFile}>
-                <Check className="w-4 h-4 mr-1 text-emerald-300" /> Accept & Download
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Completed Download Banner */}
       {completedBlobUrl && (
