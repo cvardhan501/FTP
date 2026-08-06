@@ -71,6 +71,8 @@ export default function Home() {
     peerConnected,
     incomingMeta,
     progressState,
+    sendProgressState,
+    receiveProgressState,
     completedBlobUrl,
     sendFileP2P,
     acceptIncomingFile,
@@ -335,6 +337,8 @@ export default function Home() {
       {/* Active Transfer Progress Overlay (Matches Screen 6) */}
       <ProgressOverlay
         state={progressState}
+        sendState={sendProgressState}
+        receiveState={receiveProgressState}
         onPause={pauseTransfer}
         onResume={resumeTransfer}
         onCancel={cancelTransfer}

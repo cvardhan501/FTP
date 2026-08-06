@@ -13,8 +13,11 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
   const [peerConnected, setPeerConnected] = useState(false);
   const [incomingMeta, setIncomingMeta] = useState<IncomingFileMeta | null>(null);
-  const [progressState, setProgressState] = useState<TransferProgressState | null>(null);
+  const [sendProgressState, setSendProgressState] = useState<TransferProgressState | null>(null);
+  const [receiveProgressState, setReceiveProgressState] = useState<TransferProgressState | null>(null);
   const [completedBlobUrl, setCompletedBlobUrl] = useState<string | null>(null);
+
+  const progressState = receiveProgressState || sendProgressState;
 
   const progressStateRef = useRef<TransferProgressState | null>(null);
   progressStateRef.current = progressState;
@@ -57,7 +60,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
         const total = totalChunks;
         const pct = Math.min(100, Math.round((count / total) * 100));
 
-        setProgressState((prev) => {
+        setReceiveProgressState((prev) => {
           if (!prev) return null;
           const transferred = (count / total) * prev.fileSize;
           return {
@@ -179,7 +182,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       const total = totChunks || totalChunks;
       const pct = Math.min(100, Math.round((count / total) * 100));
 
-      setProgressState((prev) => {
+      setReceiveProgressState((prev) => {
         if (!prev) return null;
         const transferred = (count / total) * prev.fileSize;
         return {
@@ -200,7 +203,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       console.log("[WebRTC] Receiver accepted file. Sender starting chunk stream now...");
       if (pendingFileRef.current) {
         const { file, chunkSizeKb } = pendingFileRef.current;
-        setProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
+        setSendProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
 
         // Check if WebRTC DataChannel is ready (give up to 1 second)
         let attempts = 0;
@@ -216,7 +219,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
               const rem = total - sent;
               const eta = speed > 0 ? rem / speed : 0;
 
-              setProgressState((prev) =>
+              setSendProgressState((prev) =>
                 prev
                   ? {
                       ...prev,
@@ -231,7 +234,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
             });
           } catch (err: any) {
             console.error("[WebRTC] Error streaming file over P2P DataChannel:", err);
-            setProgressState((prev) =>
+            setSendProgressState((prev) =>
               prev
                 ? {
                     ...prev,
@@ -283,7 +286,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
               sentBytes += end - start;
               const pct = Math.min(100, Math.round((sentBytes / totalSize) * 100));
 
-              setProgressState((prev) =>
+              setSendProgressState((prev) =>
                 prev
                   ? {
                       ...prev,
@@ -297,7 +300,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
             }
           } catch (err: any) {
             console.error("[WebRTC] Fallback streaming error:", err);
-            setProgressState((prev) =>
+            setSendProgressState((prev) =>
               prev ? { ...prev, status: "error", errorMessage: err.message || "Transfer failed" } : null
             );
           }
@@ -307,7 +310,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
     const handleFileReject = () => {
       console.log("[WebRTC] Receiver declined file transfer offer");
-      setProgressState((prev) =>
+      setSendProgressState((prev) =>
         prev ? { ...prev, status: "cancelled", errorMessage: "Transfer rejected by peer" } : null
       );
       pendingFileRef.current = null;
@@ -390,8 +393,8 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
   // Start sending file handshake
   const sendFileP2P = async (file: File, chunkSizeKb: number = 64) => {
-    if (!p2pRef.current) {
-      console.error("[WebRTC] Cannot send file: P2P manager is not connected");
+    if (!p2pRef.current && !socket) {
+      console.error("[WebRTC] Cannot send file: P2P manager and socket are disconnected");
       return;
     }
 
@@ -406,12 +409,12 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       salt: "",
       senderName: "Peer",
       senderId: socket?.id || "",
-      keyHex: p2pRef.current.cryptoKeyHex || "",
+      keyHex: p2pRef.current?.cryptoKeyHex || "",
     };
 
     pendingFileRef.current = { file, chunkSizeKb };
 
-    setProgressState({
+    setSendProgressState({
       transferId: fileMeta.id,
       fileName: file.name,
       fileSize: file.size,
@@ -446,7 +449,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       return null;
     });
 
-    setProgressState({
+    setReceiveProgressState({
       transferId: meta.id,
       fileName: meta.name,
       fileSize: meta.size,
@@ -480,17 +483,20 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
   const pauseTransfer = () => {
     p2pRef.current?.pauseTransfer();
-    setProgressState((prev) => (prev ? { ...prev, status: "paused" } : null));
+    setSendProgressState((prev) => (prev ? { ...prev, status: "paused" } : null));
+    setReceiveProgressState((prev) => (prev ? { ...prev, status: "paused" } : null));
   };
 
   const resumeTransfer = () => {
     p2pRef.current?.resumeTransfer();
-    setProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
+    setSendProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
+    setReceiveProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
   };
 
   const cancelTransfer = () => {
     p2pRef.current?.cancelTransfer();
-    setProgressState(null);
+    setSendProgressState(null);
+    setReceiveProgressState(null);
     incomingMetaRef.current = null;
     setIncomingMeta(null);
     pendingFileRef.current = null;
@@ -500,6 +506,8 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     peerConnected,
     incomingMeta,
     progressState,
+    sendProgressState,
+    receiveProgressState,
     completedBlobUrl,
     sendFileP2P,
     acceptIncomingFile,
