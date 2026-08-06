@@ -111,6 +111,14 @@ export default function Home() {
     };
   }, [socket, sfx]);
 
+  // Auto-accept incoming file offers if autoAcceptFiles setting is enabled
+  useEffect(() => {
+    if (incomingMeta && settings.autoAcceptFiles) {
+      console.log("[Auto-Accept] Auto-accepting incoming file transfer offer:", incomingMeta.name);
+      acceptIncomingFile();
+    }
+  }, [incomingMeta, settings.autoAcceptFiles, acceptIncomingFile]);
+
   const hasTriggeredCompletionRef = React.useRef<string | null>(null);
 
   // Audio & Confetti on transfer completion (Once per transfer)
@@ -290,6 +298,7 @@ export default function Home() {
             onAcceptFile={acceptIncomingFile}
             onRejectFile={rejectIncomingFile}
             completedBlobUrl={completedBlobUrl}
+            fileName={progressState?.fileName}
           />
         )}
 

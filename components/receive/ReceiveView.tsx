@@ -15,6 +15,7 @@ interface ReceiveViewProps {
   onAcceptFile: () => void;
   onRejectFile: () => void;
   completedBlobUrl: string | null;
+  fileName?: string;
 }
 
 export const ReceiveView: React.FC<ReceiveViewProps> = ({
@@ -25,10 +26,13 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
   onAcceptFile,
   onRejectFile,
   completedBlobUrl,
+  fileName,
 }) => {
   const [sessionCodeInput, setSessionCodeInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const activeFileName = incomingMeta?.name || fileName || "File";
 
   const handleConnectCode = async (code: string) => {
     if (code.trim().length !== 6) return;
@@ -104,8 +108,6 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
         </Card>
       )}
 
-
-
       {/* Completed Download Banner */}
       {completedBlobUrl && (
         <Card className="max-w-md mx-auto border-blue-500/40 text-center space-y-3 bg-blue-950/30">
@@ -113,13 +115,13 @@ export const ReceiveView: React.FC<ReceiveViewProps> = ({
             <FileCheck className="w-6 h-6" />
           </div>
           <h3 className="text-lg font-bold text-white">Transfer Completed!</h3>
-          <p className="text-xs text-slate-400">File assembled and saved automatically to your device.</p>
+          <p className="text-xs text-slate-400">File assembled and ready for download on your device.</p>
           <a
             href={completedBlobUrl}
-            download={incomingMeta?.name}
+            download={activeFileName}
             className="inline-flex items-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs gap-2"
           >
-            <Download className="w-4 h-4" /> Download {incomingMeta?.name || "File"}
+            <Download className="w-4 h-4" /> Download {activeFileName}
           </a>
         </Card>
       )}

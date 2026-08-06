@@ -19,9 +19,8 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({
   onResume,
   onCancel,
 }) => {
-  if (!state || state.status === "idle") return null;
+  if (!state || state.status === "idle" || state.status === "completed") return null;
 
-  const isCompleted = state.status === "completed";
   const isError = state.status === "error";
 
   return (
@@ -122,7 +121,7 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({
             onClick={onCancel}
             className="flex-1 py-3.5 rounded-2xl bg-rose-600/20 border border-rose-500/40 text-rose-400 font-bold text-sm flex items-center justify-center gap-2 hover:bg-rose-600/30 active:scale-95 transition-all"
           >
-            <X className="w-4 h-4" /> {isCompleted ? "Close" : "Cancel"}
+            <X className="w-4 h-4" /> Cancel
           </button>
         </div>
 

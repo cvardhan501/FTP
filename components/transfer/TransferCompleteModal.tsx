@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, Folder, RefreshCw, X } from "lucide-react";
+import { CheckCircle2, Download, RefreshCw, X } from "lucide-react";
 import { formatBytes } from "../../lib/utils";
 
 interface TransferCompleteModalProps {
@@ -60,14 +60,14 @@ export const TransferCompleteModal: React.FC<TransferCompleteModalProps> = ({
               download={fileName || "file"}
               className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-extrabold text-base shadow-xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
-              <Folder className="w-5 h-5" /> Open File
+              <Download className="w-5 h-5" /> Download File
             </a>
           ) : (
             <button
               onClick={onClose}
               className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-extrabold text-base shadow-xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
-              <Folder className="w-5 h-5" /> Done
+              <CheckCircle2 className="w-5 h-5" /> Done
             </button>
           )}
 

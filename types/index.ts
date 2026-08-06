@@ -33,6 +33,7 @@ export interface IncomingFileMeta {
   checksum?: string;
   senderName: string;
   senderId: string;
+  keyHex?: string;
 }
 
 export interface TransferProgressState {

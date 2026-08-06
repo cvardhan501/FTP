@@ -127,10 +127,13 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       }
     };
 
-    const handleFileMeta = ({ fileMeta }: { fileMeta: IncomingFileMeta }) => {
+    const handleFileMeta = async ({ fileMeta }: { fileMeta: IncomingFileMeta }) => {
       console.log("[WebRTC] Received incoming file metadata:", fileMeta.name, "Type:", fileMeta.type, "Size:", fileMeta.size);
       incomingMetaRef.current = fileMeta;
       setIncomingMeta(fileMeta);
+      if (p2pRef.current && fileMeta.keyHex) {
+        await p2pRef.current.setCryptoKeyHex(fileMeta.keyHex);
+      }
     };
 
     const handleFileAccept = async () => {
@@ -238,13 +241,17 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     });
 
     const url = URL.createObjectURL(fileObj);
-    setCompletedBlobUrl(url);
+    setCompletedBlobUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
 
     // 3. Trigger download using exact original filename (never hardcoded fallback)
     const a = document.createElement("a");
     a.href = url;
     a.download = exactName;
     a.setAttribute("download", exactName);
+    a.style.display = "none";
     document.body.appendChild(a);
     a.click();
 
@@ -252,8 +259,8 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       if (document.body.contains(a)) {
         document.body.removeChild(a);
       }
-      URL.revokeObjectURL(url);
-    }, 2000);
+      // Note: Do NOT revoke ObjectURL immediately so user can manually click download in the UI!
+    }, 1000);
   };
 
   // Start sending file handshake
@@ -274,6 +281,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       salt: "",
       senderName: "Peer",
       senderId: socket?.id || "",
+      keyHex: p2pRef.current.cryptoKeyHex || "",
     };
 
     pendingFileRef.current = { file, chunkSizeKb };
@@ -298,11 +306,20 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     }
   };
 
-  const acceptIncomingFile = () => {
+  const acceptIncomingFile = async () => {
     const meta = incomingMetaRef.current;
     if (!meta) return;
     incomingChunksRef.current.clear();
     receivedChunksCountRef.current = 0;
+
+    if (p2pRef.current && meta.keyHex) {
+      await p2pRef.current.setCryptoKeyHex(meta.keyHex);
+    }
+
+    setCompletedBlobUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
 
     setProgressState({
       transferId: meta.id,
@@ -323,7 +340,6 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     }
 
     // Dismiss incoming modal so loading/progress card displays cleanly!
-    incomingMetaRef.current = null;
     setIncomingMeta(null);
   };
 
