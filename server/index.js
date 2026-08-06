@@ -169,6 +169,14 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("file-completed", ({ targetId, sessionCode, transferId }) => {
+    if (targetId) {
+      io.to(targetId).emit("file-completed", { receiverId: socket.id, transferId });
+    } else if (sessionCode) {
+      socket.to(sessionCode).emit("file-completed", { receiverId: socket.id, transferId });
+    }
+  });
+
   // Clipboard sync
   socket.on("clipboard-sync", ({ sessionCode, text, senderName }) => {
     socket.to(sessionCode).emit("clipboard-sync", {

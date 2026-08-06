@@ -93,23 +93,27 @@ export class P2PConnectionManager {
         } catch (e) {}
       } else if (event.data instanceof ArrayBuffer) {
         const buffer = event.data;
-        const iv = new Uint8Array(buffer.slice(0, 12));
-        const encryptedBody = buffer.slice(12);
+        if (buffer.byteLength < 8) return;
 
-        let chunkData: ArrayBuffer = encryptedBody;
-        if (this.cryptoKey) {
+        const view = new DataView(buffer);
+        const chunkIndex = view.getUint32(0);
+        const totalChunks = view.getUint32(4);
+
+        let actualChunkBytes: ArrayBuffer;
+        if (buffer.byteLength >= 20 && this.cryptoKey) {
+          const iv = new Uint8Array(buffer.slice(8, 20));
+          const encryptedBody = buffer.slice(20);
           try {
-            chunkData = await decryptChunk(this.cryptoKey, encryptedBody, iv);
+            actualChunkBytes = await decryptChunk(this.cryptoKey, encryptedBody, iv);
           } catch (err) {
-            console.error("[P2P] Chunk decryption error, fallback to raw", err);
+            console.warn(`[P2P] Chunk ${chunkIndex} decryption fallback to raw body`);
+            actualChunkBytes = encryptedBody;
           }
+        } else {
+          actualChunkBytes = buffer.slice(8);
         }
 
         if (this.onFileChunkReceived) {
-          const view = new DataView(chunkData);
-          const chunkIndex = view.getUint32(0);
-          const totalChunks = view.getUint32(4);
-          const actualChunkBytes = chunkData.slice(8);
           this.onFileChunkReceived(chunkIndex, totalChunks, actualChunkBytes);
         }
       }
@@ -150,8 +154,8 @@ export class P2PConnectionManager {
     }
   }
 
-  private async flushPendingIceCandidates() {
-    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+  private async flushPendingIceCandidates(): Promise<void> {
+    if (!this.peerConnection) return;
     while (this.pendingIceCandidates.length > 0) {
       const candidate = this.pendingIceCandidates.shift();
       if (candidate) {
@@ -164,11 +168,11 @@ export class P2PConnectionManager {
     }
   }
 
-  sendKeyExchange() {
+  async sendKeyExchange(): Promise<void> {
     if (this.dataChannel && this.dataChannel.readyState === "open" && this.cryptoKeyHex) {
-      this.dataChannel.send(
-        JSON.stringify({ type: "KEY_EXCHANGE", keyHex: this.cryptoKeyHex })
-      );
+      try {
+        this.dataChannel.send(JSON.stringify({ type: "KEY_EXCHANGE", keyHex: this.cryptoKeyHex }));
+      } catch (e) {}
     }
   }
 
@@ -216,18 +220,19 @@ export class P2PConnectionManager {
       headerView.setUint32(0, i);
       headerView.setUint32(4, totalChunks);
 
-      const combined = new Uint8Array(header.byteLength + rawBuffer.byteLength);
-      combined.set(new Uint8Array(header), 0);
-      combined.set(new Uint8Array(rawBuffer), header.byteLength);
-
-      let payloadBuffer: ArrayBuffer = combined.buffer;
-      const iv = generateRandomIV();
-
+      let payloadBuffer: ArrayBuffer;
       if (this.cryptoKey) {
-        const encrypted = await encryptChunk(this.cryptoKey, combined.buffer, iv);
-        const finalBuffer = new Uint8Array(12 + encrypted.byteLength);
-        finalBuffer.set(iv, 0);
-        finalBuffer.set(new Uint8Array(encrypted), 12);
+        const iv = generateRandomIV();
+        const encrypted = await encryptChunk(this.cryptoKey, rawBuffer, iv);
+        const finalBuffer = new Uint8Array(8 + 12 + encrypted.byteLength);
+        finalBuffer.set(new Uint8Array(header), 0);
+        finalBuffer.set(iv, 8);
+        finalBuffer.set(new Uint8Array(encrypted), 20);
+        payloadBuffer = finalBuffer.buffer;
+      } else {
+        const finalBuffer = new Uint8Array(8 + rawBuffer.byteLength);
+        finalBuffer.set(new Uint8Array(header), 0);
+        finalBuffer.set(new Uint8Array(rawBuffer), 8);
         payloadBuffer = finalBuffer.buffer;
       }
 

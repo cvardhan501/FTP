@@ -160,23 +160,25 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       const matches = dataHex.match(/.{1,2}/g);
       if (!matches) return;
       const rawBytes = new Uint8Array(matches.map((b) => parseInt(b, 16))).buffer;
+      if (rawBytes.byteLength < 8) return;
 
-      let chunkData: ArrayBuffer = rawBytes;
-      if (p2pRef.current && p2pRef.current.cryptoKey && rawBytes.byteLength > 12) {
-        try {
-          const iv = new Uint8Array(rawBytes.slice(0, 12));
-          const encBody = rawBytes.slice(12);
-          const { decryptChunk } = await import("../lib/crypto");
-          chunkData = await decryptChunk(p2pRef.current.cryptoKey, encBody, iv);
-        } catch (err) {
-          console.warn("[P2P] Socket fallback chunk decryption failed, using raw", err);
-        }
-      }
-
-      const view = new DataView(chunkData);
+      const view = new DataView(rawBytes);
       const cIdx = view.getUint32(0);
       const totChunks = view.getUint32(4);
-      const actualBytes = chunkData.slice(8);
+
+      let actualBytes: ArrayBuffer;
+      if (rawBytes.byteLength >= 20 && p2pRef.current?.cryptoKey) {
+        const iv = new Uint8Array(rawBytes.slice(8, 20));
+        const encBody = rawBytes.slice(20);
+        try {
+          const { decryptChunk } = await import("../lib/crypto");
+          actualBytes = await decryptChunk(p2pRef.current.cryptoKey, encBody, iv);
+        } catch (err) {
+          actualBytes = encBody;
+        }
+      } else {
+        actualBytes = rawBytes.slice(8);
+      }
 
       if (!incomingChunksRef.current.has(cIdx)) {
         incomingChunksRef.current.set(cIdx, actualBytes);
@@ -235,8 +237,8 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
                       transferredBytes: sent,
                       speedBps: speed,
                       etaSeconds: eta,
-                      percentage: pct,
-                      status: sent >= total ? "completed" : "transferring",
+                      percentage: Math.min(99, pct), // Sender stays at 99% max until receiver confirms 100% completion!
+                      status: "transferring",
                     }
                   : null
               );
@@ -272,18 +274,20 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
               view.setUint32(0, i);
               view.setUint32(4, totalChunks);
 
-              const combined = new Uint8Array(header.byteLength + rawBuf.byteLength);
-              combined.set(new Uint8Array(header), 0);
-              combined.set(new Uint8Array(rawBuf), 8);
-
-              let payloadBuf: ArrayBuffer = combined.buffer;
+              let payloadBuf: ArrayBuffer;
               if (p2pRef.current?.cryptoKey) {
                 const { encryptChunk, generateRandomIV } = await import("../lib/crypto");
                 const iv = generateRandomIV();
-                const enc = await encryptChunk(p2pRef.current.cryptoKey, combined.buffer, iv);
-                const finalBuf = new Uint8Array(12 + enc.byteLength);
-                finalBuf.set(iv, 0);
-                finalBuf.set(new Uint8Array(enc), 12);
+                const enc = await encryptChunk(p2pRef.current.cryptoKey, rawBuf, iv);
+                const finalBuf = new Uint8Array(8 + 12 + enc.byteLength);
+                finalBuf.set(new Uint8Array(header), 0);
+                finalBuf.set(iv, 8);
+                finalBuf.set(new Uint8Array(enc), 20);
+                payloadBuf = finalBuf.buffer;
+              } else {
+                const finalBuf = new Uint8Array(8 + rawBuf.byteLength);
+                finalBuf.set(new Uint8Array(header), 0);
+                finalBuf.set(new Uint8Array(rawBuf), 8);
                 payloadBuf = finalBuf.buffer;
               }
 
@@ -293,7 +297,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
 
               socket?.emit("file-chunk-stream", { sessionCode, chunkIndex: i, totalChunks, dataHex: hexStr });
               sentBytes += end - start;
-              const pct = Math.min(100, Math.round((sentBytes / totalSize) * 100));
+              const pct = Math.min(99, Math.round((sentBytes / totalSize) * 100));
 
               setSendProgressState((prev) =>
                 prev
@@ -301,7 +305,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
                       ...prev,
                       transferredBytes: sentBytes,
                       percentage: pct,
-                      status: sentBytes >= totalSize ? "completed" : "transferring",
+                      status: "transferring",
                     }
                   : null
               );
@@ -327,6 +331,19 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       pendingFileRef.current = null;
     };
 
+    const handleFileCompleted = () => {
+      console.log("[WebRTC] Receiver confirmed 100% completion!");
+      setSendProgressState((prev) =>
+        prev
+          ? {
+              ...prev,
+              percentage: 100,
+              status: "completed",
+            }
+          : null
+      );
+    };
+
     socket.on("peer-joined", handlePeerJoined);
     socket.on("peer-left", handlePeerLeft);
     socket.on("signal-offer", handleSignalOffer);
@@ -336,6 +353,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     socket.on("file-accept", handleFileAccept);
     socket.on("file-reject", handleFileReject);
     socket.on("file-chunk-stream", handleFileChunkStream);
+    socket.on("file-completed", handleFileCompleted);
 
     return () => {
       socket.off("peer-joined", handlePeerJoined);
@@ -347,6 +365,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       socket.off("file-accept", handleFileAccept);
       socket.off("file-reject", handleFileReject);
       socket.off("file-chunk-stream", handleFileChunkStream);
+      socket.off("file-completed", handleFileCompleted);
     };
   }, [socket, sessionCode, initP2P]);
 
@@ -356,6 +375,11 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     if (!meta) {
       console.error("[WebRTC] Error: No metadata found for received file.");
       return;
+    }
+
+    if (socket) {
+      console.log("[WebRTC] Emitting file-completed confirmation to sender");
+      socket.emit("file-completed", { targetId: meta.senderId, sessionCode, transferId: meta.id });
     }
 
     const chunkArray: ArrayBuffer[] = [];
