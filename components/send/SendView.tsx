@@ -208,8 +208,7 @@ export const SendView: React.FC<SendViewProps> = ({
                         variant="primary"
                         size="sm"
                         onClick={() => onStartTransfer(item)}
-                        disabled={!peerConnected}
-                        title={peerConnected ? "Transfer File" : "Waiting for receiver connection"}
+                        title="Send File to Session Peers"
                       >
                         <Send className="w-3.5 h-3.5 mr-1" /> Send
                       </Button>

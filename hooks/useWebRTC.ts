@@ -127,59 +127,172 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       }
     };
 
-    const handleFileMeta = async ({ fileMeta }: { fileMeta: IncomingFileMeta }) => {
-      console.log("[WebRTC] Received incoming file metadata:", fileMeta.name, "Type:", fileMeta.type, "Size:", fileMeta.size);
-      incomingMetaRef.current = fileMeta;
-      setIncomingMeta(fileMeta);
-      if (p2pRef.current && fileMeta.keyHex) {
-        await p2pRef.current.setCryptoKeyHex(fileMeta.keyHex);
+    const handleFileMeta = async (data: { fileMeta: IncomingFileMeta; senderId?: string }) => {
+      const fileMeta = data.fileMeta || (data as any);
+      const actualSenderId = data.senderId || fileMeta.senderId || "";
+      const meta = { ...fileMeta, senderId: actualSenderId };
+
+      console.log("[WebRTC] Received incoming file metadata:", meta.name, "Type:", meta.type, "Size:", meta.size, "Sender:", actualSenderId);
+      incomingMetaRef.current = meta;
+      setIncomingMeta(meta);
+      if (p2pRef.current && meta.keyHex) {
+        await p2pRef.current.setCryptoKeyHex(meta.keyHex);
+      }
+    };
+
+    const handleFileChunkStream = async ({ chunkIndex, totalChunks, dataHex }: { chunkIndex: number; totalChunks: number; dataHex: string }) => {
+      const matches = dataHex.match(/.{1,2}/g);
+      if (!matches) return;
+      const rawBytes = new Uint8Array(matches.map((b) => parseInt(b, 16))).buffer;
+
+      let chunkData: ArrayBuffer = rawBytes;
+      if (p2pRef.current && p2pRef.current.cryptoKey && rawBytes.byteLength > 12) {
+        try {
+          const iv = new Uint8Array(rawBytes.slice(0, 12));
+          const encBody = rawBytes.slice(12);
+          const { decryptChunk } = await import("../lib/crypto");
+          chunkData = await decryptChunk(p2pRef.current.cryptoKey, encBody, iv);
+        } catch (err) {
+          console.warn("[P2P] Socket fallback chunk decryption failed, using raw", err);
+        }
+      }
+
+      const view = new DataView(chunkData);
+      const cIdx = view.getUint32(0);
+      const totChunks = view.getUint32(4);
+      const actualBytes = chunkData.slice(8);
+
+      if (!incomingChunksRef.current.has(cIdx)) {
+        incomingChunksRef.current.set(cIdx, actualBytes);
+        receivedChunksCountRef.current += 1;
+      }
+
+      const count = receivedChunksCountRef.current;
+      const total = totChunks || totalChunks;
+      const pct = Math.min(100, Math.round((count / total) * 100));
+
+      setProgressState((prev) => {
+        if (!prev) return null;
+        const transferred = (count / total) * prev.fileSize;
+        return {
+          ...prev,
+          currentChunk: count,
+          transferredBytes: transferred,
+          percentage: pct,
+          status: count >= total ? "completed" : "transferring",
+        };
+      });
+
+      if (count >= total) {
+        assembleReceivedFile(total);
       }
     };
 
     const handleFileAccept = async () => {
       console.log("[WebRTC] Receiver accepted file. Sender starting chunk stream now...");
-      if (pendingFileRef.current && p2pRef.current) {
+      if (pendingFileRef.current) {
         const { file, chunkSizeKb } = pendingFileRef.current;
         setProgressState((prev) => (prev ? { ...prev, status: "transferring" } : null));
 
-        // If DataChannel is connecting, wait up to 2 seconds for channel open
+        // Check if WebRTC DataChannel is ready (give up to 1 second)
         let attempts = 0;
-        while (p2pRef.current.dataChannel?.readyState !== "open" && attempts < 20) {
-          console.log("[WebRTC] DataChannel connecting... waiting 100ms");
+        while (p2pRef.current?.dataChannel?.readyState !== "open" && attempts < 10) {
           await new Promise((res) => setTimeout(res, 100));
           attempts++;
         }
 
-        try {
-          await p2pRef.current.sendFile(file, chunkSizeKb, (sent, total, speed) => {
-            const pct = Math.min(100, Math.round((sent / total) * 100));
-            const rem = total - sent;
-            const eta = speed > 0 ? rem / speed : 0;
+        if (p2pRef.current?.dataChannel?.readyState === "open") {
+          try {
+            await p2pRef.current.sendFile(file, chunkSizeKb, (sent, total, speed) => {
+              const pct = Math.min(100, Math.round((sent / total) * 100));
+              const rem = total - sent;
+              const eta = speed > 0 ? rem / speed : 0;
 
+              setProgressState((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      transferredBytes: sent,
+                      speedBps: speed,
+                      etaSeconds: eta,
+                      percentage: pct,
+                      status: sent >= total ? "completed" : "transferring",
+                    }
+                  : null
+              );
+            });
+          } catch (err: any) {
+            console.error("[WebRTC] Error streaming file over P2P DataChannel:", err);
             setProgressState((prev) =>
               prev
                 ? {
                     ...prev,
-                    transferredBytes: sent,
-                    speedBps: speed,
-                    etaSeconds: eta,
-                    percentage: pct,
-                    status: sent >= total ? "completed" : "transferring",
+                    status: "error",
+                    errorMessage: err.message || "Failed to transfer file",
                   }
                 : null
             );
-          });
-        } catch (err: any) {
-          console.error("[WebRTC] Error streaming file over P2P DataChannel:", err);
-          setProgressState((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  status: "error",
-                  errorMessage: err.message || "Failed to transfer file",
-                }
-              : null
-          );
+          }
+        } else {
+          console.log("[WebRTC] DataChannel not open. Initiating high-speed Socket Fallback Stream!");
+          try {
+            const chunkSize = chunkSizeKb * 1024;
+            const totalSize = file.size;
+            const totalChunks = Math.ceil(totalSize / chunkSize);
+            let sentBytes = 0;
+
+            for (let i = 0; i < totalChunks; i++) {
+              const start = i * chunkSize;
+              const end = Math.min(start + chunkSize, totalSize);
+              const slice = file.slice(start, end);
+              const rawBuf = await slice.arrayBuffer();
+
+              const header = new ArrayBuffer(8);
+              const view = new DataView(header);
+              view.setUint32(0, i);
+              view.setUint32(4, totalChunks);
+
+              const combined = new Uint8Array(header.byteLength + rawBuf.byteLength);
+              combined.set(new Uint8Array(header), 0);
+              combined.set(new Uint8Array(rawBuf), 8);
+
+              let payloadBuf: ArrayBuffer = combined.buffer;
+              if (p2pRef.current?.cryptoKey) {
+                const { encryptChunk, generateRandomIV } = await import("../lib/crypto");
+                const iv = generateRandomIV();
+                const enc = await encryptChunk(p2pRef.current.cryptoKey, combined.buffer, iv);
+                const finalBuf = new Uint8Array(12 + enc.byteLength);
+                finalBuf.set(iv, 0);
+                finalBuf.set(new Uint8Array(enc), 12);
+                payloadBuf = finalBuf.buffer;
+              }
+
+              const hexStr = Array.from(new Uint8Array(payloadBuf))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("");
+
+              socket?.emit("file-chunk-stream", { sessionCode, chunkIndex: i, totalChunks, dataHex: hexStr });
+              sentBytes += end - start;
+              const pct = Math.min(100, Math.round((sentBytes / totalSize) * 100));
+
+              setProgressState((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      transferredBytes: sentBytes,
+                      percentage: pct,
+                      status: sentBytes >= totalSize ? "completed" : "transferring",
+                    }
+                  : null
+              );
+              await new Promise((res) => setTimeout(res, 5));
+            }
+          } catch (err: any) {
+            console.error("[WebRTC] Fallback streaming error:", err);
+            setProgressState((prev) =>
+              prev ? { ...prev, status: "error", errorMessage: err.message || "Transfer failed" } : null
+            );
+          }
         }
       }
     };
@@ -199,6 +312,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
     socket.on("file-meta", handleFileMeta);
     socket.on("file-accept", handleFileAccept);
     socket.on("file-reject", handleFileReject);
+    socket.on("file-chunk-stream", handleFileChunkStream);
 
     return () => {
       socket.off("peer-joined", handlePeerJoined);
@@ -208,6 +322,7 @@ export function useWebRTC(socket: Socket | null, sessionCode: string | null) {
       socket.off("file-meta", handleFileMeta);
       socket.off("file-accept", handleFileAccept);
       socket.off("file-reject", handleFileReject);
+      socket.off("file-chunk-stream", handleFileChunkStream);
     };
   }, [socket, sessionCode, initP2P]);
 

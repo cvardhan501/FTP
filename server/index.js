@@ -143,12 +143,30 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("file-accept", ({ targetId, transferId }) => {
-    io.to(targetId).emit("file-accept", { receiverId: socket.id, transferId });
+  socket.on("file-accept", ({ targetId, sessionCode, transferId }) => {
+    if (targetId) {
+      io.to(targetId).emit("file-accept", { receiverId: socket.id, transferId });
+    }
+    if (sessionCode) {
+      socket.to(sessionCode).emit("file-accept", { receiverId: socket.id, transferId });
+    }
   });
 
-  socket.on("file-reject", ({ targetId, transferId, reason }) => {
-    io.to(targetId).emit("file-reject", { receiverId: socket.id, transferId, reason });
+  socket.on("file-reject", ({ targetId, sessionCode, transferId, reason }) => {
+    if (targetId) {
+      io.to(targetId).emit("file-reject", { receiverId: socket.id, transferId, reason });
+    }
+    if (sessionCode) {
+      socket.to(sessionCode).emit("file-reject", { receiverId: socket.id, transferId, reason });
+    }
+  });
+
+  socket.on("file-chunk-stream", ({ targetId, sessionCode, chunkIndex, totalChunks, dataHex }) => {
+    if (targetId) {
+      io.to(targetId).emit("file-chunk-stream", { chunkIndex, totalChunks, dataHex });
+    } else if (sessionCode) {
+      socket.to(sessionCode).emit("file-chunk-stream", { chunkIndex, totalChunks, dataHex });
+    }
   });
 
   // Clipboard sync
