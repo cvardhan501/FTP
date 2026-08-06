@@ -70,7 +70,9 @@ export interface AppSettings {
   soundEffects: boolean;
   desktopNotifications: boolean;
   autoSaveDownloads: boolean;
+  autoAcceptFiles?: boolean;
   chunkSizeKb: number; // e.g. 64 KB
+  deviceName?: string;
 }
 
 export interface ClipboardMessage {

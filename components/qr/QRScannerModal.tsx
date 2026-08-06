@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
-import { X, Camera, RefreshCw, AlertCircle, Scan } from "lucide-react";
+import { X, Camera, RefreshCw, AlertCircle, Scan, Upload, SwitchCamera, Check } from "lucide-react";
 import { Button } from "../ui";
 
 interface QRScannerModalProps {
@@ -15,11 +15,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
   const [manualCode, setManualCode] = useState("");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopCamera = () => {
     if (animationFrameRef.current) {
@@ -33,8 +37,21 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
     setIsScanning(false);
   };
 
-  const startCamera = async () => {
+  const getCameraDevices = async () => {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((d) => d.kind === "videoinput");
+        setAvailableDevices(videoDevices);
+      }
+    } catch (e) {
+      console.warn("[QRScanner] Failed to enumerate video devices:", e);
+    }
+  };
+
+  const startCamera = async (overrideDeviceId?: string) => {
     setCameraError(null);
+    setImageError(null);
     stopCamera();
 
     try {
@@ -42,10 +59,34 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
         throw new Error("Camera API not supported on this browser.");
       }
 
-      // Enforce rear/back camera strictly (facingMode: environment)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-      });
+      await getCameraDevices();
+
+      let videoConstraint: boolean | MediaTrackConstraints = true;
+
+      const devId = overrideDeviceId || selectedDeviceId;
+      if (devId) {
+        videoConstraint = { deviceId: { exact: devId } };
+      } else {
+        // Fallback strategy: Try rear camera ideal, else fallback to standard video
+        videoConstraint = { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } };
+      }
+
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint });
+      } catch (err1) {
+        console.warn("[QRScanner] First camera attempt failed, trying fallback to front/any camera:", err1);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        } catch (err2) {
+          console.warn("[QRScanner] Second camera attempt failed, trying simple video: true", err2);
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
+      }
+
+      if (!stream) {
+        throw new Error("Could not initialize video stream");
+      }
 
       streamRef.current = stream;
 
@@ -61,9 +102,34 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
       setCameraError(
         err.name === "NotAllowedError" || err.name === "PermissionDeniedError"
           ? "Camera permission denied. Please allow camera access in browser settings."
-          : "Rear camera not available or active in another app."
+          : "Webcam not detected or busy in another app. You can upload a QR image or enter PIN below."
       );
     }
+  };
+
+  const parseCodeFromText = (rawText: string): string | null => {
+    if (!rawText) return null;
+    const cleanText = rawText.trim();
+    console.log("[QRScanner] Raw Decoded QR Text:", cleanText);
+
+    // 1. Direct 6-character code
+    if (/^[A-Za-z0-9]{6}$/.test(cleanText)) {
+      return cleanText;
+    }
+
+    // 2. URL parameter code=XXXXXX
+    const match = cleanText.match(/code=([A-Za-z0-9]{6})/i);
+    if (match && match[1]) {
+      return match[1];
+    }
+
+    // 3. Fallback: Any 6 digits/chars sequence
+    const fallbackMatch = cleanText.match(/\b([A-Za-z0-9]{6})\b/);
+    if (fallbackMatch && fallbackMatch[1]) {
+      return fallbackMatch[1];
+    }
+
+    return null;
   };
 
   const scanFrame = () => {
@@ -87,20 +153,12 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const codeResult = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: "dontInvert",
+      inversionAttempts: "attemptBoth",
     });
 
     if (codeResult && codeResult.data) {
-      let rawText = codeResult.data.trim();
-      console.log("[QRScanner] Decoded QR Text:", rawText);
-
-      let code = rawText;
-      if (rawText.includes("code=")) {
-        const match = rawText.match(/code=(\d{6})/);
-        if (match) code = match[1];
-      }
-
-      if (code.length === 6) {
+      const code = parseCodeFromText(codeResult.data);
+      if (code) {
         stopCamera();
         onScanSuccess(code);
         onClose();
@@ -111,9 +169,61 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
     animationFrameRef.current = requestAnimationFrame(scanFrame);
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageError(null);
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current || document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+          setImageError("Could not process image context.");
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        const codeResult = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "attemptBoth",
+        });
+
+        if (codeResult && codeResult.data) {
+          const code = parseCodeFromText(codeResult.data);
+          if (code) {
+            stopCamera();
+            onScanSuccess(code);
+            onClose();
+          } else {
+            setImageError("QR code detected, but missing valid 6-digit session PIN.");
+          }
+        } else {
+          setImageError("No valid AirDropX QR code found in the selected image.");
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+  const toggleCamera = () => {
+    if (availableDevices.length < 2) return;
+    const currentIndex = availableDevices.findIndex((d) => d.deviceId === selectedDeviceId);
+    const nextIndex = (currentIndex + 1) % availableDevices.length;
+    const nextDevId = availableDevices[nextIndex].deviceId;
+    setSelectedDeviceId(nextDevId);
+    startCamera(nextDevId);
+  };
+
   useEffect(() => {
     if (isOpen) {
-      // Delay camera start slightly to ensure DOM ref is mounted
       const timer = setTimeout(() => {
         startCamera();
       }, 100);
@@ -157,8 +267,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
           <span>Scan Session QR Code</span>
         </div>
 
-        {/* Hidden Canvas for Decoding */}
+        {/* Hidden Canvas & File Input for QR Decoding */}
         <canvas ref={canvasRef} className="hidden" />
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          className="hidden"
+          onChange={handleImageUpload}
+        />
 
         {/* Camera Viewport Area (Perfect Square Shape) */}
         <div className="relative w-64 h-64 mx-auto bg-slate-950 rounded-[32px] overflow-hidden border-2 border-purple-500/40 shadow-2xl flex items-center justify-center">
@@ -169,18 +286,26 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
             muted
           />
 
+          {/* Switch Camera Button (if multiple webcams) */}
+          {availableDevices.length > 1 && isScanning && (
+            <button
+              onClick={toggleCamera}
+              className="absolute top-3 right-3 p-2 bg-slate-900/80 hover:bg-purple-600 border border-white/20 rounded-full text-white text-xs flex items-center gap-1 backdrop-blur-md shadow-md transition-all"
+              title="Switch Camera"
+            >
+              <SwitchCamera className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Glowing Animated Target Corner Brackets & Scanner Line */}
           {isScanning && !cameraError && (
             <div className="absolute inset-0 pointer-events-none p-3 flex items-center justify-center">
-              {/* Target Square */}
               <div className="w-full h-full relative border-2 border-purple-400/50 rounded-2xl shadow-2xl">
-                {/* Corner Accents */}
                 <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-purple-400 rounded-tl-xl" />
                 <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-purple-400 rounded-tr-xl" />
                 <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-purple-400 rounded-bl-xl" />
                 <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-purple-400 rounded-br-xl" />
 
-                {/* Moving Scanning Laser Line */}
                 <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_15px_#a855f7] animate-[scanLaser_2s_ease-in-out_infinite]" />
               </div>
             </div>
@@ -190,11 +315,27 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
           {cameraError && (
             <div className="absolute inset-0 p-5 bg-slate-950/95 flex flex-col items-center justify-center text-center space-y-3 text-xs text-rose-400 font-medium">
               <AlertCircle className="w-9 h-9" />
-              <p>{cameraError}</p>
-              <Button variant="glass" size="sm" onClick={startCamera} className="mt-2 py-1.5 px-3 text-xs">
+              <p className="text-[11px] leading-tight">{cameraError}</p>
+              <Button variant="glass" size="sm" onClick={() => startCamera()} className="mt-1 py-1.5 px-3 text-xs">
                 <RefreshCw className="w-3.5 h-3.5 mr-1" /> Retry Camera
               </Button>
             </div>
+          )}
+        </div>
+
+        {/* Upload QR Image File Fallback */}
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="glass"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full py-2 text-xs border-purple-500/30 text-purple-300 hover:bg-purple-500/10"
+          >
+            <Upload className="w-3.5 h-3.5 mr-1.5" /> Upload QR Screenshot / Photo
+          </Button>
+
+          {imageError && (
+            <p className="text-[11px] text-rose-400 font-medium">{imageError}</p>
           )}
         </div>
 
@@ -223,3 +364,4 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
     </div>
   );
 };
+

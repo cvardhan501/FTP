@@ -78,7 +78,7 @@ export default function Home() {
     cancelTransfer,
   } = useWebRTC(socket, sessionCode);
 
-  const sfx = useAudioSFX();
+  const sfx = useAudioSFX(settings.soundEffects);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -211,14 +211,19 @@ export default function Home() {
     saveStoredSettings(updated);
   };
 
+  const handleSelectMode = (mode: AppMode) => {
+    if (mode === "settings") {
+      setSettingsOpen(true);
+    } else {
+      setCurrentMode(mode);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-sans transition-colors bg-[#090d16] text-white selection:bg-blue-500 selection:text-white">
       <Navbar
         currentMode={currentMode}
-        onSelectMode={(m) => {
-          if (m === "settings") setSettingsOpen(true);
-          else setCurrentMode(m);
-        }}
+        onSelectMode={handleSelectMode}
         isConnected={isConnected}
         theme={theme}
         onToggleTheme={toggleTheme}
@@ -246,11 +251,11 @@ export default function Home() {
       )}
 
       <main className="flex-1 pb-24">
-        {currentMode === "landing" && <LandingView onSelectMode={setCurrentMode} />}
+        {currentMode === "landing" && <LandingView onSelectMode={handleSelectMode} />}
 
-        {currentMode === "home" && (
+        {(currentMode === "home" || currentMode === "settings") && (
           <HomeView
-            onSelectMode={setCurrentMode}
+            onSelectMode={handleSelectMode}
             activeDevices={activeDevices}
             historyRecords={historyRecords}
             onConnectDevice={(targetId) => sendDeviceInvite(targetId, sessionCode)}
@@ -311,7 +316,7 @@ export default function Home() {
       </main>
 
       {/* Floating Bottom Navigation Bar (Matches Mockup) */}
-      <BottomNav currentMode={currentMode} onSelectMode={setCurrentMode} />
+      <BottomNav currentMode={currentMode} onSelectMode={handleSelectMode} />
 
       {/* Active Transfer Progress Overlay (Matches Screen 6) */}
       <ProgressOverlay

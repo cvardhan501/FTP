@@ -37,6 +37,25 @@ export const MobileKeypad: React.FC<MobileKeypadProps> = ({
     onChange("");
   };
 
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (/^[0-9]$/.test(e.key)) {
+        handleDigit(e.key);
+      } else if (e.key === "Backspace") {
+        handleBackspace();
+      } else if (e.key === "Enter" && value.length === 6) {
+        onSubmit(value);
+      } else if (e.key === "Escape") {
+        handleClear();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [value]);
+
   return (
     <div className="space-y-6 w-full max-w-xs mx-auto">
       {/* 6 Digit Box Display */}

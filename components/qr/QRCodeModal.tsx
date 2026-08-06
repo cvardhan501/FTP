@@ -23,7 +23,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, sessi
       width: 320,
       margin: 2,
       color: {
-        dark: "#3b82f6",
+        dark: "#ffffff",
         light: "#0f172a",
       },
     })
